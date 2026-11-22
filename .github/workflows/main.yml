@@ -1,0 +1,201 @@
+name: Build BlitzDJ
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+    tags:
+      - "v*"
+    paths-ignore:
+      - "**/*.md"
+      - "LICENSE"
+
+  pull_request:
+    branches:
+      - main
+      - dev
+
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: "Select the build platform"
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - all
+          - windows
+          - linux
+          - macos
+
+      build_type:
+        description: "Select the build configuration"
+        required: true
+        default: "Release"
+        type: choice
+        options:
+          - Release
+          - Debug
+
+      enable_bluetooth:
+        description: "Enable Bluetooth support"
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows
+            os: windows-latest
+            artifact: BlitzDJ-Windows
+
+          - platform: linux
+            os: ubuntu-24.04
+            artifact: BlitzDJ-Linux
+
+          - platform: macos
+            os: macos-latest
+            artifact: BlitzDJ-macOS
+
+    steps:
+      - name: Check selected platform
+        id: selection
+        shell: bash
+        env:
+          REQUESTED_PLATFORM: ${{ inputs.platform || 'all' }}
+        run: |
+          if [[ "$REQUESTED_PLATFORM" == "all" ||
+                "$REQUESTED_PLATFORM" == "${{ matrix.platform }}" ]]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout repository
+        if: steps.selection.outputs.enabled == 'true'
+        uses: actions/checkout@v4
+
+      - name: Setup CMake
+        if: steps.selection.outputs.enabled == 'true'
+        uses: lukka/get-cmake@latest
+
+      - name: Install Linux dependencies
+        if: steps.selection.outputs.enabled == 'true' && matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            pkg-config \
+            libcurl4-openssl-dev \
+            libssl-dev \
+            libglib2.0-dev \
+            bluez
+
+      - name: Install macOS dependencies
+        if: steps.selection.outputs.enabled == 'true' && matrix.platform == 'macos'
+        run: |
+          brew install curl openssl pkg-config
+
+      - name: Install Windows dependencies
+        if: steps.selection.outputs.enabled == 'true' && matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          vcpkg install curl:x64-windows openssl:x64-windows
+
+      - name: Configure Windows
+        if: steps.selection.outputs.enabled == 'true' && matrix.platform == 'windows'
+        shell: pwsh
+        env:
+          BUILD_TYPE: ${{ inputs.build_type || 'Release' }}
+          ENABLE_BLUETOOTH: ${{ inputs.enable_bluetooth == false && 'OFF' || 'ON' }}
+        run: |
+          cmake -S . -B build `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
+            -DVCPKG_TARGET_TRIPLET=x64-windows `
+            -DBLITZDJ_ENABLE_BLUETOOTH="$env:ENABLE_BLUETOOTH" `
+            -DBLITZDJ_ENABLE_LTO=ON
+
+      - name: Configure Linux
+        if: steps.selection.outputs.enabled == 'true' && matrix.platform == 'linux'
+        shell: bash
+        env:
+          BUILD_TYPE: ${{ inputs.build_type || 'Release' }}
+          ENABLE_BLUETOOTH: ${{ inputs.enable_bluetooth == false && 'OFF' || 'ON' }}
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
+            -DBLITZDJ_ENABLE_BLUETOOTH="$ENABLE_BLUETOOTH" \
+            -DBLITZDJ_ENABLE_LTO=ON
+
+      - name: Configure macOS
+        if: steps.selection.outputs.enabled == 'true' && matrix.platform == 'macos'
+        shell: bash
+        env:
+          BUILD_TYPE: ${{ inputs.build_type || 'Release' }}
+          ENABLE_BLUETOOTH: ${{ inputs.enable_bluetooth == false && 'OFF' || 'ON' }}
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
+            -DOPENSSL_ROOT_DIR="$(brew --prefix openssl)" \
+            -DBLITZDJ_ENABLE_BLUETOOTH="$ENABLE_BLUETOOTH" \
+            -DBLITZDJ_ENABLE_LTO=ON
+
+      - name: Build BlitzDJ
+        if: steps.selection.outputs.enabled == 'true'
+        shell: bash
+        env:
+          BUILD_TYPE: ${{ inputs.build_type || 'Release' }}
+        run: |
+          cmake --build build \
+            --config "$BUILD_TYPE" \
+            --parallel 2
+
+      - name: Install BlitzDJ
+        if: steps.selection.outputs.enabled == 'true'
+        shell: bash
+        env:
+          BUILD_TYPE: ${{ inputs.build_type || 'Release' }}
+        run: |
+          cmake --install build \
+            --config "$BUILD_TYPE" \
+            --prefix "$GITHUB_WORKSPACE/dist"
+
+      - name: Package BlitzDJ
+        if: steps.selection.outputs.enabled == 'true'
+        shell: bash
+        env:
+          BUILD_TYPE: ${{ inputs.build_type || 'Release' }}
+        run: |
+          cd build
+          cpack -C "$BUILD_TYPE"
+
+      - name: Upload executable
+        if: steps.selection.outputs.enabled == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}-${{ inputs.build_type || 'Release' }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload packages
+        if: steps.selection.outputs.enabled == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}-Package-${{ inputs.build_type || 'Release' }}
+          path: |
+            build/*.zip
+            build/*.tar.gz
+          if-no-files-found: error
+          retention-days: 14
