@@ -134,6 +134,11 @@ else()
     message(FATAL_ERROR "Unknown HTTP backend: ${BLITZDJ_HTTP_BACKEND}")
 endif()
 
+if(NOT BLITZDJ_MOBILE)
+    list(APPEND BLITZDJ_CORE_SOURCES "${BLITZDJ_SOURCE_DIR}/OAuthCallbackServer.cpp")
+    list(APPEND BLITZDJ_PUBLIC_HEADERS "${BLITZDJ_INCLUDE_DIR}/OAuthCallbackServer.hpp")
+endif()
+
 set(BLITZDJ_HAS_BLUETOOTH OFF)
 
 if(BLITZDJ_ENABLE_BLUETOOTH)
@@ -187,6 +192,10 @@ endif()
 
 if(BLITZDJ_HAS_BLUETOOTH)
     target_link_libraries(BlitzDJCore PRIVATE PkgConfig::GIO)
+endif()
+
+if(WIN32)
+    target_link_libraries(BlitzDJCore PUBLIC ws2_32)
 endif()
 
 target_compile_definitions(BlitzDJCore PUBLIC

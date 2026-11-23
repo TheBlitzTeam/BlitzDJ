@@ -79,8 +79,13 @@ class MainActivity : Activity() {
         autoDjQuery.setText(BlitzClient.savedQuery(this))
 
         updateAccountUi()
-        handleRedirect(intent)
-        refreshAccount()
+
+        if (isRedirect(intent)) {
+            BlitzClient.autoLoginAttempted = true
+            handleRedirect(intent)
+        } else {
+            refreshAccount(autoLogin = true)
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -204,6 +209,11 @@ class MainActivity : Activity() {
         }
 
         BlitzClient.saveClientId(this, clientId)
+        startLogin()
+    }
+
+    private fun startLogin() {
+        BlitzClient.autoLoginAttempted = true
 
         BlitzClient.executor.execute {
             val handle = BlitzClient.handle(this)
@@ -220,19 +230,16 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun isRedirect(intent: Intent?): Boolean =
+        intent?.data?.scheme == "blitzdj"
+
     private fun handleRedirect(intent: Intent?) {
-        if (intent == null) {
+        if (intent == null || !isRedirect(intent)) {
             return
         }
 
-        val data = intent.data ?: return
-
-        if (data.scheme != "blitzdj") {
-            return
-        }
-
+        val url = intent.data.toString()
         intent.data = null
-        val url = data.toString()
 
         BlitzClient.executor.execute {
             val handle = BlitzClient.handle(this)
@@ -246,7 +253,7 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun refreshAccount() {
+    private fun refreshAccount(autoLogin: Boolean = false) {
         BlitzClient.executor.execute {
             val handle = BlitzClient.handle(this)
             val isAuthenticated = handle != 0L && NativeBridge.isAuthenticated(handle)
@@ -261,6 +268,8 @@ class MainActivity : Activity() {
 
                 if (isAuthenticated) {
                     refreshPlayback()
+                } else if (autoLogin && !BlitzClient.autoLoginAttempted && handle != 0L) {
+                    startLogin()
                 }
             }
         }

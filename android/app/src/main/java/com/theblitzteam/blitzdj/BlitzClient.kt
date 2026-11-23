@@ -16,6 +16,9 @@ object BlitzClient {
         Thread(runnable, "BlitzDJ-Worker").apply { isDaemon = true }
     }
 
+    @Volatile
+    var autoLoginAttempted = false
+
     private var handle = 0L
     private var activeClientId = ""
 

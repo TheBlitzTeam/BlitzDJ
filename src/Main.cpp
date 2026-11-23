@@ -1,4 +1,5 @@
 #include "BlitzDJ.hpp"
+#include "OAuthCallbackServer.hpp"
 
 #if BLITZDJ_HAS_BLUETOOTH
 #include "Bluetooth.hpp"
@@ -184,6 +185,69 @@ namespace
         }
     }
 
+    bool manualLogin(BlitzDJ& dj, const std::string& url)
+    {
+        std::cout
+            << "If the browser did not open, use this URL:\n\n"
+            << url << "\n\n"
+            << "After authorizing, paste the full URL from the\n"
+            << "browser address bar.\n\n";
+
+        const auto redirect = input("Redirect URL: ");
+
+        if (redirect.empty())
+            return false;
+
+        return dj.handleRedirect(redirect);
+    }
+
+    bool connectSpotify(BlitzDJ& dj)
+    {
+        const auto url = dj.getAuthorizationUrl();
+
+        if (url.empty())
+        {
+            std::cout << "Unable to generate login URL.\n";
+            return false;
+        }
+
+        const auto redirectUri = dj.getConfig().redirectUri;
+
+        if (!OAuthCallbackServer::supports(redirectUri))
+        {
+            openBrowser(url);
+            return manualLogin(dj, url);
+        }
+
+        OAuthCallbackServer server(redirectUri);
+
+        if (!server.start())
+        {
+            std::cout << "Automatic login unavailable: " << server.getLastError() << "\n\n";
+            openBrowser(url);
+            return manualLogin(dj, url);
+        }
+
+        openBrowser(url);
+
+        std::cout
+            << "Opening Spotify in your browser...\n"
+            << "Waiting for authorization (up to 3 minutes).\n\n"
+            << "If the browser did not open, use this URL:\n"
+            << url << "\n\n" << std::flush;
+
+        const auto redirect = server.waitForRedirect(std::chrono::minutes(3));
+        server.stop();
+
+        if (!redirect)
+        {
+            std::cout << server.getLastError() << "\n\n";
+            return manualLogin(dj, url);
+        }
+
+        return dj.handleRedirect(*redirect);
+    }
+
     void spotifyLogin(BlitzDJ& dj)
     {
         header("SPOTIFY AUTHENTICATION");
@@ -192,42 +256,29 @@ namespace
         {
             std::cout << "Spotify is already connected.\n\n"
                       << "[1] Log out\n"
+                      << "[2] Reconnect\n"
                       << "[0] Back\n\n";
 
-            if (number("Select: ") == 1)
+            const int choice = number("Select: ");
+
+            if (choice == 1)
             {
                 dj.logout();
                 std::cout << "Logged out.\n";
+                wait();
+            }
+            else if (choice == 2)
+            {
+                dj.logout();
+                header("SPOTIFY AUTHENTICATION");
+                result(connectSpotify(dj), dj);
                 wait();
             }
 
             return;
         }
 
-        const auto url = dj.getAuthorizationUrl();
-
-        if (url.empty())
-        {
-            std::cout << "Unable to generate login URL.\n";
-            wait();
-            return;
-        }
-
-        openBrowser(url);
-
-        std::cout
-            << "Your browser should open the Spotify login page.\n"
-            << "If it does not, open this URL manually:\n\n"
-            << url << "\n\n"
-            << "After authorizing, paste the full URL from the\n"
-            << "browser address bar (it starts with your redirect URI).\n\n";
-
-        const auto redirect = input("Redirect URL: ");
-
-        if (redirect.empty())
-            return;
-
-        result(dj.handleRedirect(redirect), dj);
+        result(connectSpotify(dj), dj);
         wait();
     }
 
@@ -885,6 +936,13 @@ int main()
 
     settings["client_id"] = clientId;
     saveSettings(settingsPath, settings);
+
+    if (!dj.isAuthenticated())
+    {
+        header("SPOTIFY AUTHENTICATION");
+        result(connectSpotify(dj), dj);
+        wait();
+    }
 
 #if BLITZDJ_HAS_BLUETOOTH
     Bluetooth bluetooth;

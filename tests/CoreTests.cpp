@@ -2,6 +2,7 @@
 #include "BlitzDJBridge.h"
 #include "BlitzSpotify.hpp"
 #include "Crypto.hpp"
+#include "OAuthCallbackServer.hpp"
 
 #include <cstdio>
 #include <filesystem>
@@ -10,6 +11,7 @@
 #include <memory>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <vector>
 
 using namespace blitzdj;
@@ -215,6 +217,53 @@ namespace
         check(!ai.isQueued("t0") && ai.hasPlayed("t0"), "played moves from queue to history");
     }
 
+    void testCallbackServer()
+    {
+        check(OAuthCallbackServer::supports("http://127.0.0.1:8888/callback"), "loopback supported");
+        check(!OAuthCallbackServer::supports("blitzdj://callback"), "custom scheme not served");
+        check(!OAuthCallbackServer::supports("http://example.com:8888/callback"), "remote host rejected");
+
+        OAuthCallbackServer server("http://127.0.0.1:18923/callback");
+
+        if (!server.start())
+        {
+            std::cerr << "Skipping callback server test: " << server.getLastError() << "\n";
+            return;
+        }
+
+        HttpResponse missing;
+        HttpResponse callback;
+
+        std::thread client([&]
+        {
+            auto http = createDefaultHttpClient();
+
+            HttpRequest request;
+            request.url = "http://127.0.0.1:18923/favicon.ico";
+            request.timeoutSeconds = 5;
+            missing = http->send(request);
+
+            request.url = "http://127.0.0.1:18923/callback?code=abc&state=xyz";
+            callback = http->send(request);
+        });
+
+        const auto redirect = server.waitForRedirect(std::chrono::seconds(10));
+        client.join();
+
+        check(missing.statusCode == 404, "unknown path returns 404");
+        check(callback.statusCode == 200, "callback returns 200");
+        check(callback.body.find("Spotify authorized") != std::string::npos, "callback page");
+        check(redirect && *redirect == "http://127.0.0.1:18923/callback?code=abc&state=xyz", "redirect captured");
+
+        OAuthCallbackServer busy("http://127.0.0.1:18923/callback");
+        check(!busy.start(), "port in use detected");
+
+        server.stop();
+
+        OAuthCallbackServer timeout("http://127.0.0.1:18924/callback");
+        check(!timeout.waitForRedirect(std::chrono::seconds(1)).has_value(), "timeout returns nothing");
+    }
+
     void testBridge()
     {
         auto* handle = blitzdj_create("client", "blitzdj://callback", "");
@@ -241,6 +290,7 @@ int main()
     testCrypto();
     testAuthenticationFlow();
     testAI();
+    testCallbackServer();
     testBridge();
 
     if (failures == 0)
