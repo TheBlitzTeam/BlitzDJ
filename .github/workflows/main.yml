@@ -28,6 +28,8 @@ on:
           - windows
           - linux
           - macos
+          - android
+          - ios
 
       build_type:
         description: "Select the build configuration"
@@ -47,10 +49,19 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  BUILD_TYPE: ${{ inputs.build_type || 'Release' }}
+  REQUESTED_PLATFORM: ${{ inputs.platform || 'all' }}
+
 jobs:
-  build:
+  desktop:
     name: Build ${{ matrix.platform }}
     runs-on: ${{ matrix.os }}
+    if: ${{ inputs.platform == '' || inputs.platform == 'all' || inputs.platform == 'windows' || inputs.platform == 'linux' || inputs.platform == 'macos' }}
 
     strategy:
       fail-fast: false
@@ -72,11 +83,8 @@ jobs:
       - name: Check selected platform
         id: selection
         shell: bash
-        env:
-          REQUESTED_PLATFORM: ${{ inputs.platform || 'all' }}
         run: |
-          if [[ "$REQUESTED_PLATFORM" == "all" ||
-                "$REQUESTED_PLATFORM" == "${{ matrix.platform }}" ]]; then
+          if [[ "$REQUESTED_PLATFORM" == "all" || "$REQUESTED_PLATFORM" == "${{ matrix.platform }}" ]]; then
             echo "enabled=true" >> "$GITHUB_OUTPUT"
           else
             echo "enabled=false" >> "$GITHUB_OUTPUT"
@@ -94,88 +102,57 @@ jobs:
         if: steps.selection.outputs.enabled == 'true' && matrix.platform == 'linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            pkg-config \
-            libcurl4-openssl-dev \
-            libssl-dev \
-            libglib2.0-dev \
-            bluez
-
-      - name: Install macOS dependencies
-        if: steps.selection.outputs.enabled == 'true' && matrix.platform == 'macos'
-        run: |
-          brew install curl openssl pkg-config
+          sudo apt-get install -y build-essential pkg-config libcurl4-openssl-dev libglib2.0-dev
 
       - name: Install Windows dependencies
         if: steps.selection.outputs.enabled == 'true' && matrix.platform == 'windows'
         shell: pwsh
-        run: |
-          vcpkg install curl:x64-windows openssl:x64-windows
+        run: vcpkg install curl:x64-windows
 
-      - name: Configure Windows
+      - name: Configure
+        if: steps.selection.outputs.enabled == 'true'
+        shell: bash
+        env:
+          ENABLE_BLUETOOTH: ${{ inputs.enable_bluetooth == false && 'OFF' || 'ON' }}
+        run: |
+          EXTRA_ARGS=()
+
+          if [[ "${{ matrix.platform }}" == "windows" ]]; then
+            EXTRA_ARGS+=("-DCMAKE_TOOLCHAIN_FILE=$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake")
+            EXTRA_ARGS+=("-DVCPKG_TARGET_TRIPLET=x64-windows")
+          fi
+
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
+            -DBLITZDJ_ENABLE_BLUETOOTH="$ENABLE_BLUETOOTH" \
+            -DBLITZDJ_BUILD_TESTS=ON \
+            -DBLITZDJ_ENABLE_LTO=ON \
+            "${EXTRA_ARGS[@]}"
+
+      - name: Build
+        if: steps.selection.outputs.enabled == 'true'
+        shell: bash
+        run: cmake --build build --config "$BUILD_TYPE" --parallel 4
+
+      - name: Test
+        if: steps.selection.outputs.enabled == 'true'
+        shell: bash
+        run: ctest --test-dir build --build-config "$BUILD_TYPE" --output-on-failure
+
+      - name: Install
+        if: steps.selection.outputs.enabled == 'true'
+        shell: bash
+        run: cmake --install build --config "$BUILD_TYPE" --prefix "$GITHUB_WORKSPACE/dist"
+
+      - name: Bundle Windows runtime
         if: steps.selection.outputs.enabled == 'true' && matrix.platform == 'windows'
-        shell: pwsh
-        env:
-          BUILD_TYPE: ${{ inputs.build_type || 'Release' }}
-          ENABLE_BLUETOOTH: ${{ inputs.enable_bluetooth == false && 'OFF' || 'ON' }}
-        run: |
-          cmake -S . -B build `
-            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
-            -DVCPKG_TARGET_TRIPLET=x64-windows `
-            -DBLITZDJ_ENABLE_BLUETOOTH="$env:ENABLE_BLUETOOTH" `
-            -DBLITZDJ_ENABLE_LTO=ON
-
-      - name: Configure Linux
-        if: steps.selection.outputs.enabled == 'true' && matrix.platform == 'linux'
         shell: bash
-        env:
-          BUILD_TYPE: ${{ inputs.build_type || 'Release' }}
-          ENABLE_BLUETOOTH: ${{ inputs.enable_bluetooth == false && 'OFF' || 'ON' }}
         run: |
-          cmake -S . -B build \
-            -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
-            -DBLITZDJ_ENABLE_BLUETOOTH="$ENABLE_BLUETOOTH" \
-            -DBLITZDJ_ENABLE_LTO=ON
+          cp "$VCPKG_INSTALLATION_ROOT"/installed/x64-windows/bin/*.dll "$GITHUB_WORKSPACE/dist/bin/" || true
 
-      - name: Configure macOS
-        if: steps.selection.outputs.enabled == 'true' && matrix.platform == 'macos'
-        shell: bash
-        env:
-          BUILD_TYPE: ${{ inputs.build_type || 'Release' }}
-          ENABLE_BLUETOOTH: ${{ inputs.enable_bluetooth == false && 'OFF' || 'ON' }}
-        run: |
-          cmake -S . -B build \
-            -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
-            -DOPENSSL_ROOT_DIR="$(brew --prefix openssl)" \
-            -DBLITZDJ_ENABLE_BLUETOOTH="$ENABLE_BLUETOOTH" \
-            -DBLITZDJ_ENABLE_LTO=ON
-
-      - name: Build BlitzDJ
+      - name: Package
         if: steps.selection.outputs.enabled == 'true'
         shell: bash
-        env:
-          BUILD_TYPE: ${{ inputs.build_type || 'Release' }}
-        run: |
-          cmake --build build \
-            --config "$BUILD_TYPE" \
-            --parallel 2
-
-      - name: Install BlitzDJ
-        if: steps.selection.outputs.enabled == 'true'
-        shell: bash
-        env:
-          BUILD_TYPE: ${{ inputs.build_type || 'Release' }}
-        run: |
-          cmake --install build \
-            --config "$BUILD_TYPE" \
-            --prefix "$GITHUB_WORKSPACE/dist"
-
-      - name: Package BlitzDJ
-        if: steps.selection.outputs.enabled == 'true'
-        shell: bash
-        env:
-          BUILD_TYPE: ${{ inputs.build_type || 'Release' }}
         run: |
           cd build
           cpack -C "$BUILD_TYPE"
@@ -184,7 +161,7 @@ jobs:
         if: steps.selection.outputs.enabled == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact }}-${{ inputs.build_type || 'Release' }}
+          name: ${{ matrix.artifact }}-${{ env.BUILD_TYPE }}
           path: dist/
           if-no-files-found: error
           retention-days: 14
@@ -193,9 +170,104 @@ jobs:
         if: steps.selection.outputs.enabled == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact }}-Package-${{ inputs.build_type || 'Release' }}
+          name: ${{ matrix.artifact }}-Package-${{ env.BUILD_TYPE }}
           path: |
             build/*.zip
             build/*.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+
+  android:
+    name: Build android
+    runs-on: ubuntu-24.04
+    if: ${{ inputs.platform == '' || inputs.platform == 'all' || inputs.platform == 'android' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+
+      - name: Build APK
+        working-directory: android
+        env:
+          SPOTIFY_CLIENT_ID: ${{ secrets.SPOTIFY_CLIENT_ID }}
+        run: |
+          if [[ "$BUILD_TYPE" == "Debug" ]]; then
+            gradle --no-daemon assembleDebug
+          else
+            gradle --no-daemon assembleRelease
+          fi
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: BlitzDJ-Android-${{ env.BUILD_TYPE }}
+          path: android/app/build/outputs/apk/**/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
+  ios:
+    name: Build ios
+    runs-on: macos-latest
+    if: ${{ inputs.platform == '' || inputs.platform == 'all' || inputs.platform == 'ios' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup CMake
+        uses: lukka/get-cmake@latest
+
+      - name: Build device library
+        run: |
+          cmake -S . -B build-ios -G Ninja \
+            -DCMAKE_SYSTEM_NAME=iOS \
+            -DCMAKE_OSX_SYSROOT=iphoneos \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0 \
+            -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
+            -DBLITZDJ_ENABLE_BLUETOOTH=OFF \
+            -DBLITZDJ_ENABLE_LTO=OFF
+          cmake --build build-ios --parallel 4
+          cmake --install build-ios --prefix "$GITHUB_WORKSPACE/dist-ios"
+
+      - name: Build simulator library
+        run: |
+          cmake -S . -B build-sim -G Ninja \
+            -DCMAKE_SYSTEM_NAME=iOS \
+            -DCMAKE_OSX_SYSROOT=iphonesimulator \
+            "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64" \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0 \
+            -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
+            -DBLITZDJ_ENABLE_BLUETOOTH=OFF \
+            -DBLITZDJ_ENABLE_LTO=OFF
+          cmake --build build-sim --parallel 4
+          cmake --install build-sim --prefix "$GITHUB_WORKSPACE/dist-sim"
+
+      - name: Create XCFramework
+        run: |
+          xcodebuild -create-xcframework \
+            -library dist-ios/lib/libblitzdj.a -headers dist-ios/include/blitzdj \
+            -library dist-sim/lib/libblitzdj.a -headers dist-sim/include/blitzdj \
+            -output BlitzDJ.xcframework
+
+      - name: Upload XCFramework
+        uses: actions/upload-artifact@v4
+        with:
+          name: BlitzDJ-iOS-${{ env.BUILD_TYPE }}
+          path: BlitzDJ.xcframework
           if-no-files-found: error
           retention-days: 14

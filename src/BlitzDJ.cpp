@@ -2,15 +2,18 @@
 
 #include <algorithm>
 #include <chrono>
-#include <thread>
-#include <utility>
 
 namespace blitzdj
 {
+    namespace
+    {
+        using Lock = std::lock_guard<std::mutex>;
+    }
+
     BlitzDJ::BlitzDJ(const BlitzDJConfig& config)
         : config_(config),
           spotify_(config.clientId, config.redirectUri),
-          ai_()
+          random_(std::random_device{}())
     {
         BlitzAIConfig aiConfig;
         aiConfig.avoidExplicit = config.avoidExplicit;
@@ -20,6 +23,7 @@ namespace blitzdj
 
         autoDJEnabled_.store(config.autoDJ);
         spotify_.enableAutoDJ(config.autoDJ);
+        spotify_.setSessionPath(config.sessionPath);
     }
 
     BlitzDJ::~BlitzDJ()
@@ -29,7 +33,13 @@ namespace blitzdj
 
     bool BlitzDJ::initialize()
     {
-        return spotify_.initialize();
+        if (!spotify_.initialize())
+        {
+            return false;
+        }
+
+        spotify_.loadSession();
+        return true;
     }
 
     std::string BlitzDJ::getAuthorizationUrl()
@@ -37,15 +47,30 @@ namespace blitzdj
         return spotify_.generateAuthorizationUrl();
     }
 
-    bool BlitzDJ::authenticate(
-        const std::string& authorizationCode,
-        const std::string& state
-    )
+    bool BlitzDJ::authenticate(const std::string& authorizationCode, const std::string& state)
     {
-        return spotify_.authenticate(
-            authorizationCode,
-            state
-        );
+        return spotify_.authenticate(authorizationCode, state);
+    }
+
+    bool BlitzDJ::handleRedirect(const std::string& redirectUrl)
+    {
+        return spotify_.handleRedirect(redirectUrl);
+    }
+
+    bool BlitzDJ::isAuthenticated() const
+    {
+        return spotify_.isAuthenticated();
+    }
+
+    void BlitzDJ::logout()
+    {
+        stop();
+        spotify_.logout();
+        ai_.clearHistory();
+
+        Lock lock(stateMutex_);
+        lastQueuedTrackId_.clear();
+        lastObservedTrackId_.clear();
     }
 
     bool BlitzDJ::start()
@@ -57,29 +82,36 @@ namespace blitzdj
 
         if (!spotify_.isAuthenticated())
         {
+            setError("Spotify is not connected.");
             return false;
         }
 
-        if (config_.autoPlay)
+        if (config_.autoPlay && !spotify_.play())
         {
-            if (!spotify_.play())
-            {
-                return false;
-            }
+            setError(spotify_.getLastError());
+            return false;
+        }
+
+        if (autoDJEnabled_.load() && config_.initialQueueSize > 0)
+        {
+            queueRecommendedTracks(config_.initialQueueSize);
+        }
+
+        if (worker_.joinable())
+        {
+            worker_.join();
         }
 
         running_.store(true);
 
         try
         {
-            worker_ = std::thread(
-                &BlitzDJ::runLoop,
-                this
-            );
+            worker_ = std::thread(&BlitzDJ::runLoop, this);
         }
         catch (...)
         {
             running_.store(false);
+            setError("Could not start the AutoDJ worker.");
             return false;
         }
 
@@ -88,9 +120,14 @@ namespace blitzdj
 
     void BlitzDJ::stop()
     {
-        running_.store(false);
+        {
+            std::lock_guard<std::mutex> lock(workerMutex_);
+            running_.store(false);
+        }
 
-        if (worker_.joinable())
+        wakeup_.notify_all();
+
+        if (worker_.joinable() && worker_.get_id() != std::this_thread::get_id())
         {
             worker_.join();
         }
@@ -102,37 +139,19 @@ namespace blitzdj
         {
             update();
 
-            const int interval = std::max(
-                250,
-                config_.updateIntervalMs
-            );
+            const int interval = std::max(250, config_.updateIntervalMs);
 
-            int elapsed = 0;
-
-            while (running_.load() && elapsed < interval)
+            std::unique_lock<std::mutex> lock(workerMutex_);
+            wakeup_.wait_for(lock, std::chrono::milliseconds(interval), [this]
             {
-                const int step = std::min(
-                    250,
-                    interval - elapsed
-                );
-
-                std::this_thread::sleep_for(
-                    std::chrono::milliseconds(step)
-                );
-
-                elapsed += step;
-            }
+                return !running_.load();
+            });
         }
     }
 
     void BlitzDJ::update()
     {
-        if (!spotify_.isAuthenticated())
-        {
-            return;
-        }
-
-        if (!autoDJEnabled_.load())
+        if (!autoDJEnabled_.load() || !spotify_.isAuthenticated())
         {
             return;
         }
@@ -142,38 +161,34 @@ namespace blitzdj
 
     bool BlitzDJ::updateAutoDJ()
     {
-        auto playback = spotify_.getPlayback();
+        const auto playback = spotify_.getPlayback();
 
-        if (!playback.has_value())
+        if (!playback)
         {
             return false;
         }
 
         observePlayback(*playback);
 
-        if (!playback->playing)
+        if (!playback->playing || playback->track.id.empty())
         {
             return false;
         }
 
-        const int remainingMs = std::max(
-            0,
-            playback->durationMs - playback->progressMs
-        );
+        const int remainingMs = std::max(0, playback->durationMs - playback->progressMs);
 
         if (remainingMs > config_.queueThresholdMs)
         {
             return true;
         }
 
-        if (playback->track.id.empty())
         {
-            return false;
-        }
+            Lock lock(stateMutex_);
 
-        if (lastQueuedTrackId_ == playback->track.id)
-        {
-            return true;
+            if (lastQueuedTrackId_ == playback->track.id)
+            {
+                return true;
+            }
         }
 
         if (!queueNextRecommendedTrack())
@@ -181,108 +196,147 @@ namespace blitzdj
             return false;
         }
 
+        Lock lock(stateMutex_);
         lastQueuedTrackId_ = playback->track.id;
         return true;
     }
 
-    void BlitzDJ::observePlayback(
-        const SpotifyPlayback& playback
-    )
+    void BlitzDJ::observePlayback(const SpotifyPlayback& playback)
     {
         if (playback.track.id.empty())
         {
             return;
         }
 
-        if (lastObservedTrackId_ == playback.track.id)
         {
-            return;
-        }
+            Lock lock(stateMutex_);
 
-        lastObservedTrackId_ = playback.track.id;
-        lastQueuedTrackId_.clear();
+            if (lastObservedTrackId_ == playback.track.id)
+            {
+                return;
+            }
+
+            lastObservedTrackId_ = playback.track.id;
+            lastQueuedTrackId_.clear();
+        }
 
         ai_.recordPlayed(playback.track);
     }
 
-    std::vector<SpotifyTrack> BlitzDJ::fetchCandidates()
+    std::vector<SpotifyTrack> BlitzDJ::fetchCandidates(const std::string& query, int limit)
     {
-        const int limit = std::clamp(
-            config_.searchLimit,
-            1,
-            50
-        );
+        std::vector<SpotifyTrack> candidates;
 
-        return spotify_.searchTracks(
-            config_.searchQuery,
-            limit
-        );
+        if (query.empty())
+        {
+            return candidates;
+        }
+
+        const int pageSize = BlitzSpotify::SEARCH_PAGE_LIMIT;
+        const int pages = std::clamp((limit + pageSize - 1) / pageSize, 1, 5);
+        const int range = std::clamp(config_.searchOffsetRange, 0, BlitzSpotify::SEARCH_MAX_OFFSET - pages * pageSize);
+
+        int offset = 0;
+
+        if (range > 0)
+        {
+            Lock lock(stateMutex_);
+            std::uniform_int_distribution<int> distribution(0, range / pageSize);
+            offset = distribution(random_) * pageSize;
+        }
+
+        for (int page = 0; page < pages; ++page)
+        {
+            auto tracks = spotify_.searchTracks(query, pageSize, offset + page * pageSize);
+
+            if (tracks.empty())
+            {
+                break;
+            }
+
+            candidates.insert(candidates.end(), tracks.begin(), tracks.end());
+
+            if (static_cast<int>(tracks.size()) < pageSize)
+            {
+                break;
+            }
+        }
+
+        if (candidates.empty() && offset > 0)
+        {
+            for (int page = 0; page < pages; ++page)
+            {
+                auto tracks = spotify_.searchTracks(query, pageSize, page * pageSize);
+
+                if (tracks.empty())
+                {
+                    break;
+                }
+
+                candidates.insert(candidates.end(), tracks.begin(), tracks.end());
+            }
+        }
+
+        return candidates;
     }
 
     bool BlitzDJ::queueNextRecommendedTrack()
     {
-        const auto candidates = fetchCandidates();
+        const auto candidates = fetchCandidates(getSearchQuery(), config_.searchLimit);
 
         if (candidates.empty())
         {
+            setError("No tracks were found for the AutoDJ search.");
             return false;
         }
 
-        const auto selected = ai_.selectTracks(
-            candidates,
-            1
-        );
+        const auto selected = ai_.selectTracks(candidates, 1);
 
         if (selected.empty())
         {
+            setError("Every candidate track was played recently.");
             return false;
         }
 
-        return spotify_.queueAutomaticTrack(
-            selected.front()
-        );
+        if (!spotify_.queueAutomaticTrack(selected.front()))
+        {
+            setError(spotify_.getLastError());
+            return false;
+        }
+
+        ai_.markQueued(selected.front());
+        return true;
     }
 
-    bool BlitzDJ::initializeQueue()
-    {
-        return queueRecommendedTracks(
-            config_.initialQueueSize
-        );
-    }
-
-    bool BlitzDJ::queueRecommendedTracks(
-        std::size_t count
-    )
+    bool BlitzDJ::queueRecommendedTracks(std::size_t count)
     {
         if (!spotify_.isAuthenticated() || count == 0)
         {
+            setError("Spotify is not connected.");
             return false;
         }
 
-        const auto candidates = fetchCandidates();
-
-        const auto selected = ai_.selectTracks(
-            candidates,
-            count
-        );
+        const int limit = std::max(config_.searchLimit, static_cast<int>(count) * 3);
+        const auto selected = ai_.selectTracks(fetchCandidates(getSearchQuery(), limit), count);
 
         if (selected.empty())
         {
+            setError("No new tracks are available to queue.");
             return false;
         }
-
-        bool success = true;
 
         for (const auto& track : selected)
         {
             if (!spotify_.addToQueue(track.uri))
             {
-                success = false;
-                break;
+                setError(spotify_.getLastError());
+                return false;
             }
+
+            ai_.markQueued(track);
         }
 
-        return success;
+        return true;
     }
 
     bool BlitzDJ::play()
@@ -305,57 +359,55 @@ namespace blitzdj
         return spotify_.nextTrack();
     }
 
-    bool BlitzDJ::playTrack(
-        const std::string& trackUri
-    )
+    bool BlitzDJ::previous()
     {
-        lastQueuedTrackId_.clear();
+        return spotify_.previousTrack();
+    }
+
+    bool BlitzDJ::playTrack(const std::string& trackUri)
+    {
+        {
+            Lock lock(stateMutex_);
+            lastQueuedTrackId_.clear();
+        }
+
         return spotify_.playTrack(trackUri);
     }
 
-    bool BlitzDJ::searchAndPlay(
-        const std::string& query
-    )
+    bool BlitzDJ::searchAndPlay(const std::string& query)
     {
-        const auto tracks = spotify_.searchTracks(
-            query,
-            20
-        );
-
-        if (tracks.empty())
-        {
-            return false;
-        }
-
-        const auto selected = ai_.selectTracks(
-            tracks,
-            1
-        );
+        const auto selected = ai_.selectTracks(fetchCandidates(query, BlitzSpotify::SEARCH_PAGE_LIMIT * 2), 1);
 
         if (selected.empty())
         {
+            setError("No tracks were found.");
             return false;
         }
 
         return playTrack(selected.front().uri);
     }
 
-    bool BlitzDJ::queueTrack(
-        const std::string& trackUri
-    )
+    bool BlitzDJ::queueTrack(const std::string& trackUri)
     {
         return spotify_.addToQueue(trackUri);
     }
 
-    void BlitzDJ::setSearchQuery(
-        const std::string& query
-    )
+    void BlitzDJ::setSearchQuery(const std::string& query)
     {
-        if (!query.empty())
+        if (query.empty())
         {
-            config_.searchQuery = query;
-            lastQueuedTrackId_.clear();
+            return;
         }
+
+        Lock lock(stateMutex_);
+        config_.searchQuery = query;
+        lastQueuedTrackId_.clear();
+    }
+
+    std::string BlitzDJ::getSearchQuery() const
+    {
+        Lock lock(stateMutex_);
+        return config_.searchQuery;
     }
 
     void BlitzDJ::setAutoDJ(bool enabled)
@@ -374,30 +426,39 @@ namespace blitzdj
         return running_.load();
     }
 
-    std::vector<SpotifyTrack> BlitzDJ::search(
-        const std::string& query,
-        int limit
-    )
+    std::vector<SpotifyTrack> BlitzDJ::search(const std::string& query, int limit)
     {
         return spotify_.searchTracks(query, limit);
     }
 
-    std::vector<SpotifyTrack> BlitzDJ::recommend(
-        const std::string& query,
-        std::size_t count
-    )
+    std::vector<SpotifyTrack> BlitzDJ::recommend(const std::string& query, std::size_t count)
     {
-        const auto candidates = spotify_.searchTracks(
-            query,
-            50
-        );
-
-        return ai_.selectTracks(candidates, count);
+        const int limit = std::max(config_.searchLimit, static_cast<int>(count) * 3);
+        return ai_.selectTracks(fetchCandidates(query, limit), count);
     }
 
     std::optional<SpotifyPlayback> BlitzDJ::getPlayback()
     {
         return spotify_.getPlayback();
+    }
+
+    std::string BlitzDJ::getLastError() const
+    {
+        const auto spotifyError = spotify_.getLastError();
+
+        if (!spotifyError.empty())
+        {
+            return spotifyError;
+        }
+
+        Lock lock(stateMutex_);
+        return lastError_;
+    }
+
+    void BlitzDJ::setError(const std::string& message)
+    {
+        Lock lock(stateMutex_);
+        lastError_ = message;
     }
 
     BlitzSpotify& BlitzDJ::spotify()
@@ -410,8 +471,9 @@ namespace blitzdj
         return ai_;
     }
 
-    const BlitzDJConfig& BlitzDJ::getConfig() const
+    BlitzDJConfig BlitzDJ::getConfig() const
     {
+        Lock lock(stateMutex_);
         return config_;
     }
 }

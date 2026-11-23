@@ -66,3 +66,17 @@ vcpkg_installed/
 # test output & cache
 Testing/
 .cache/
+
+# Android
+.gradle/
+local.properties
+android/app/.cxx/
+android/app/build/
+android/build/
+*.apk
+*.aab
+*.keystore
+
+# Apple
+*.xcframework/
+DerivedData/

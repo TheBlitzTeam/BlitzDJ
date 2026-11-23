@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <deque>
+#include <mutex>
 #include <random>
 #include <string>
 #include <unordered_map>
@@ -36,7 +37,7 @@ namespace blitzdj
         );
 
         void setConfig(const BlitzAIConfig& config);
-        const BlitzAIConfig& getConfig() const;
+        BlitzAIConfig getConfig() const;
 
         void setFavoriteArtists(
             const std::vector<std::string>& artists
@@ -46,6 +47,9 @@ namespace blitzdj
             const std::vector<std::string>& trackIds
         );
 
+        std::vector<std::string> getFavoriteArtists() const;
+        std::vector<std::string> getFavoriteTracks() const;
+
         void addFavoriteArtist(const std::string& artist);
         void addFavoriteTrack(const std::string& trackId);
 
@@ -53,9 +57,11 @@ namespace blitzdj
         void removeFavoriteTrack(const std::string& trackId);
 
         void recordPlayed(const SpotifyTrack& track);
+        void markQueued(const SpotifyTrack& track);
         void clearHistory();
 
         bool hasPlayed(const std::string& trackId) const;
+        bool isQueued(const std::string& trackId) const;
 
         double scoreTrack(const SpotifyTrack& track) const;
 
@@ -89,17 +95,32 @@ namespace blitzdj
         std::deque<SpotifyTrack> history_;
         std::unordered_map<std::string, std::size_t> recentTrackCounts_;
 
+        std::deque<std::string> queuedOrder_;
+        std::unordered_set<std::string> queuedTracks_;
+
         std::mt19937 random_;
+
+        mutable std::mutex mutex_;
 
         static std::string normalize(const std::string& value);
 
-        bool isEligible(const SpotifyTrack& track) const;
+        static std::vector<std::string> splitArtists(const std::string& artists);
 
-        double calculateScore(
+        bool isRecentUnlocked(const std::string& trackId) const;
+
+        bool isEligibleUnlocked(const SpotifyTrack& track) const;
+
+        double calculateScoreUnlocked(
             const SpotifyTrack& track,
             const std::unordered_set<std::string>& selectedArtists
         ) const;
 
-        void trimHistory();
+        std::vector<SpotifyTrack> rankTracksUnlocked(
+            const std::vector<SpotifyTrack>& candidates
+        ) const;
+
+        void markQueuedUnlocked(const std::string& trackId);
+
+        void trimHistoryUnlocked();
     };
 }

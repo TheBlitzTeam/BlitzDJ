@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">BlitzDJ</string>
+    <string name="tagline">Intelligent Music Player</string>
+    <string name="client_id_hint">Spotify Client ID</string>
+    <string name="redirect_hint">Redirect URI to register in the Spotify dashboard: blitzdj://callback</string>
+    <string name="connect">Connect Spotify</string>
+    <string name="logout">Log out</string>
+    <string name="connected">Connected to Spotify</string>
+    <string name="disconnected">Not connected</string>
+    <string name="nothing_playing">Nothing playing</string>
+    <string name="open_spotify_hint">Start Spotify on any device, then control it here.</string>
+    <string name="open_spotify">Open Spotify</string>
+    <string name="devices">Devices</string>
+    <string name="previous">⏮</string>
+    <string name="play">▶</string>
+    <string name="pause">⏸</string>
+    <string name="next">⏭</string>
+    <string name="volume">Volume</string>
+    <string name="auto_dj">AutoDJ</string>
+    <string name="auto_dj_query_hint">Genre, mood or artist</string>
+    <string name="queue_recommendations">Queue 5 picks</string>
+    <string name="search_hint">Search tracks</string>
+    <string name="search">Search</string>
+    <string name="queue">Queue</string>
+    <string name="play_track">Play</string>
+    <string name="use_device">Use</string>
+    <string name="no_results">No results.</string>
+    <string name="no_devices">No Spotify devices found. Open Spotify first.</string>
+    <string name="client_id_required">Enter your Spotify Client ID first.</string>
+    <string name="login_success">Spotify connected.</string>
+    <string name="done">Done.</string>
+    <string name="channel_name">AutoDJ</string>
+    <string name="notification_title">BlitzDJ AutoDJ is running</string>
+    <string name="notification_text">Queueing music for: %1$s</string>
+    <string name="stop">Stop</string>
+</resources>

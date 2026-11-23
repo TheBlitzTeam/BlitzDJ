@@ -3,13 +3,13 @@
 #include <algorithm>
 #include <utility>
 
-#ifdef __linux__
+#if BLITZDJ_HAS_BLUETOOTH
 #include <gio/gio.h>
 #endif
 
 namespace blitzdj {
 struct Bluetooth::Impl {
-#ifdef __linux__
+#if BLITZDJ_HAS_BLUETOOTH
     GDBusConnection* bus = nullptr;
 #endif
 };
@@ -23,7 +23,7 @@ void Bluetooth::setError(BluetoothError error, const std::string& message) {
     if (errorCallback_) errorCallback_(error, message);
 }
 
-#ifdef __linux__
+#if BLITZDJ_HAS_BLUETOOTH
 namespace {
 using DeviceList = std::vector<BluetoothDevice>;
 struct Snapshot { std::vector<BluetoothAdapter> adapters; DeviceList devices; };
@@ -156,7 +156,7 @@ bool setProperty(GDBusConnection* bus, const std::string& path, const char* ifac
 
 bool Bluetooth::initialize() {
     if (initialized_) return true;
-#ifdef __linux__
+#if BLITZDJ_HAS_BLUETOOTH
     GError* error = nullptr;
     impl_->bus = g_bus_get_sync(G_BUS_TYPE_SYSTEM, nullptr, &error);
     if (!impl_->bus) {
@@ -181,7 +181,7 @@ bool Bluetooth::initialize() {
 }
 
 void Bluetooth::shutdown() {
-#ifdef __linux__
+#if BLITZDJ_HAS_BLUETOOTH
     if (impl_->bus) { g_object_unref(impl_->bus); impl_->bus = nullptr; }
 #endif
     initialized_ = false;
@@ -189,7 +189,7 @@ void Bluetooth::shutdown() {
 }
 bool Bluetooth::isInitialized() const { return initialized_; }
 bool Bluetooth::isSupported() const {
-#ifdef __linux__
+#if BLITZDJ_HAS_BLUETOOTH
     return true;
 #else
     return false;
@@ -199,7 +199,7 @@ void Bluetooth::setConfig(const BluetoothConfig& config) { config_ = config; }
 const BluetoothConfig& Bluetooth::getConfig() const { return config_; }
 
 std::vector<BluetoothAdapter> Bluetooth::getAdapters() {
-#ifdef __linux__
+#if BLITZDJ_HAS_BLUETOOTH
     if (!initialized_) { setError(BluetoothError::NotInitialized, "Bluetooth is not initialized"); return {}; }
     std::string error;
     auto result = snapshot(impl_->bus, error);
@@ -215,7 +215,7 @@ std::optional<BluetoothAdapter> Bluetooth::getDefaultAdapter() {
     return adapters.front();
 }
 bool Bluetooth::setAdapterPowered(bool enabled) {
-#ifdef __linux__
+#if BLITZDJ_HAS_BLUETOOTH
     auto adapter = getDefaultAdapter();
     if (!adapter) return false;
     std::string error;
@@ -226,7 +226,7 @@ bool Bluetooth::setAdapterPowered(bool enabled) {
 #endif
 }
 bool Bluetooth::setDiscoverable(bool enabled) {
-#ifdef __linux__
+#if BLITZDJ_HAS_BLUETOOTH
     auto adapter = getDefaultAdapter();
     if (!adapter) return false;
     std::string error;
@@ -239,7 +239,7 @@ bool Bluetooth::setDiscoverable(bool enabled) {
 bool Bluetooth::isAdapterPowered() { auto adapter = getDefaultAdapter(); return adapter && adapter->powered; }
 
 bool Bluetooth::startScan() {
-#ifdef __linux__
+#if BLITZDJ_HAS_BLUETOOTH
     auto adapter = getDefaultAdapter();
     if (!adapter) return false;
     std::string error;
@@ -253,7 +253,7 @@ bool Bluetooth::startScan() {
 #endif
 }
 void Bluetooth::stopScan() {
-#ifdef __linux__
+#if BLITZDJ_HAS_BLUETOOTH
     if (initialized_ && scanning_) {
         auto adapter = getDefaultAdapter();
         if (adapter) {
@@ -267,7 +267,7 @@ void Bluetooth::stopScan() {
 }
 bool Bluetooth::isScanning() const { return scanning_; }
 std::vector<BluetoothDevice> Bluetooth::getDevices() {
-#ifdef __linux__
+#if BLITZDJ_HAS_BLUETOOTH
     if (!initialized_) { setError(BluetoothError::NotInitialized, "Bluetooth is not initialized"); return {}; }
     std::string error;
     auto data = snapshot(impl_->bus, error);
@@ -297,7 +297,7 @@ std::optional<BluetoothDevice> Bluetooth::findDeviceByAddress(const std::string&
     setError(BluetoothError::DeviceNotFound, "Device not found"); return std::nullopt;
 }
 bool Bluetooth::pairDevice(const std::string& id) {
-#ifdef __linux__
+#if BLITZDJ_HAS_BLUETOOTH
     if (!findDevice(id)) return false;
     std::string error;
     if (method(impl_->bus, id, "org.bluez.Device1", "Pair", error)) return true;
@@ -307,7 +307,7 @@ bool Bluetooth::pairDevice(const std::string& id) {
 #endif
 }
 bool Bluetooth::unpairDevice(const std::string& id) {
-#ifdef __linux__
+#if BLITZDJ_HAS_BLUETOOTH
     if (!findDevice(id)) return false;
     auto adapter = getDefaultAdapter();
     if (!adapter) return false;
@@ -325,7 +325,7 @@ bool Bluetooth::unpairDevice(const std::string& id) {
 #endif
 }
 bool Bluetooth::trustDevice(const std::string& id, bool trusted) {
-#ifdef __linux__
+#if BLITZDJ_HAS_BLUETOOTH
     if (!findDevice(id)) return false;
     std::string error;
     if (setProperty(impl_->bus, id, "org.bluez.Device1", "Trusted", trusted, error)) return true;
@@ -335,7 +335,7 @@ bool Bluetooth::trustDevice(const std::string& id, bool trusted) {
 #endif
 }
 bool Bluetooth::connectDevice(const std::string& id) {
-#ifdef __linux__
+#if BLITZDJ_HAS_BLUETOOTH
     auto device = findDevice(id);
     if (!device) return false;
     if (device->connected) return true;
@@ -354,7 +354,7 @@ bool Bluetooth::connectDevice(const std::string& id) {
 #endif
 }
 bool Bluetooth::disconnectDevice(const std::string& id) {
-#ifdef __linux__
+#if BLITZDJ_HAS_BLUETOOTH
     auto device = findDevice(id);
     if (!device) return false;
     if (!device->connected) return true;
@@ -397,7 +397,7 @@ int Bluetooth::getSignalStrength(const std::string& id) { auto d = findDevice(id
 int Bluetooth::getBatteryLevel(const std::string& id) {
     auto d = findDevice(id);
     if (!d) return -1;
-#ifdef __linux__
+#if BLITZDJ_HAS_BLUETOOTH
     std::string error;
     auto data = snapshot(impl_->bus, error);
     (void)data;

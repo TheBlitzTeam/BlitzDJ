@@ -123,7 +123,6 @@ namespace blitzdj
         void setConfig(const BluetoothConfig& config);
         const BluetoothConfig& getConfig() const;
 
-        // Adapter management
         std::vector<BluetoothAdapter> getAdapters();
 
         std::optional<BluetoothAdapter> getDefaultAdapter();
@@ -133,7 +132,6 @@ namespace blitzdj
 
         bool isAdapterPowered();
 
-        // Device discovery
         bool startScan();
         void stopScan();
 
@@ -152,7 +150,6 @@ namespace blitzdj
             const std::string& address
         );
 
-        // Pairing
         bool pairDevice(const std::string& deviceId);
         bool unpairDevice(const std::string& deviceId);
 
@@ -161,7 +158,6 @@ namespace blitzdj
             bool trusted = true
         );
 
-        // Connection
         bool connectDevice(const std::string& deviceId);
         bool disconnectDevice(const std::string& deviceId);
 
@@ -173,7 +169,6 @@ namespace blitzdj
 
         std::vector<BluetoothDevice> getConnectedDevices();
 
-        // Audio devices
         bool connectAudioDevice(
             const std::string& deviceId
         );
@@ -188,12 +183,10 @@ namespace blitzdj
 
         std::optional<BluetoothDevice> getDefaultAudioDevice();
 
-        // Device information
         int getSignalStrength(const std::string& deviceId);
 
         int getBatteryLevel(const std::string& deviceId);
 
-        // Callbacks
         void setDeviceDiscoveredCallback(
             DeviceCallback callback
         );
@@ -206,14 +199,12 @@ namespace blitzdj
             ErrorCallback callback
         );
 
-        // Error handling
         BluetoothError getLastError() const;
 
         const std::string& getLastErrorMessage() const;
 
         void clearError();
 
-        // Utilities
         static std::string deviceTypeToString(
             BluetoothDeviceType type
         );

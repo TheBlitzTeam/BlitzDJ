@@ -4,22 +4,95 @@
 #include "Bluetooth.hpp"
 #endif
 
-#include <algorithm>
+#include <chrono>
 #include <cstdlib>
-#include <iomanip>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <limits>
 #include <optional>
 #include <string>
 #include <thread>
-#include <chrono>
 #include <vector>
+
+#ifdef _WIN32
+#define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <shellapi.h>
+#endif
 
 using namespace blitzdj;
 
 namespace
 {
-    constexpr const char* VERSION = "0.2.0";
+    constexpr const char* VERSION = BLITZDJ_VERSION;
+
+    std::filesystem::path configDirectory()
+    {
+#ifdef _WIN32
+        if (const char* appData = std::getenv("APPDATA"))
+            return std::filesystem::path(appData) / "BlitzDJ";
+#elif defined(__APPLE__)
+        if (const char* home = std::getenv("HOME"))
+            return std::filesystem::path(home) / "Library" / "Application Support" / "BlitzDJ";
+#else
+        if (const char* xdg = std::getenv("XDG_CONFIG_HOME"); xdg && *xdg)
+            return std::filesystem::path(xdg) / "BlitzDJ";
+
+        if (const char* home = std::getenv("HOME"))
+            return std::filesystem::path(home) / ".config" / "BlitzDJ";
+#endif
+        return std::filesystem::current_path() / "config";
+    }
+
+    Json loadSettings(const std::filesystem::path& path)
+    {
+        std::ifstream file(path);
+
+        if (!file)
+            return Json::object();
+
+        auto data = Json::parse(file, nullptr, false);
+        return data.is_object() ? data : Json::object();
+    }
+
+    void saveSettings(const std::filesystem::path& path, const Json& data)
+    {
+        std::error_code error;
+        std::filesystem::create_directories(path.parent_path(), error);
+
+        std::ofstream file(path, std::ios::trunc);
+
+        if (file)
+            file << data.dump(2);
+    }
+
+    void enableTerminalColors()
+    {
+#ifdef _WIN32
+        HANDLE output = GetStdHandle(STD_OUTPUT_HANDLE);
+        DWORD mode = 0;
+
+        if (output != INVALID_HANDLE_VALUE && GetConsoleMode(output, &mode))
+            SetConsoleMode(output, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+
+        SetConsoleOutputCP(CP_UTF8);
+#endif
+    }
+
+    void openBrowser(const std::string& url)
+    {
+#ifdef _WIN32
+        ShellExecuteA(nullptr, "open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+#elif defined(__APPLE__)
+        const std::string command = "open '" + url + "' >/dev/null 2>&1 &";
+        [[maybe_unused]] const int status = std::system(command.c_str());
+#else
+        const std::string command = "xdg-open '" + url + "' >/dev/null 2>&1 &";
+        [[maybe_unused]] const int status = std::system(command.c_str());
+#endif
+    }
 
     void clearScreen()
     {
@@ -84,7 +157,7 @@ namespace
         {
             std::cout << "\nOperation failed.\n";
 
-            const auto& error = dj.spotify().getLastError();
+            const auto error = dj.getLastError();
 
             if (!error.empty())
                 std::cout << "Error: " << error << "\n";
@@ -115,10 +188,19 @@ namespace
     {
         header("SPOTIFY AUTHENTICATION");
 
-        if (dj.spotify().isAuthenticated())
+        if (dj.isAuthenticated())
         {
-            std::cout << "Spotify is already connected.\n";
-            wait();
+            std::cout << "Spotify is already connected.\n\n"
+                      << "[1] Log out\n"
+                      << "[0] Back\n\n";
+
+            if (number("Select: ") == 1)
+            {
+                dj.logout();
+                std::cout << "Logged out.\n";
+                wait();
+            }
+
             return;
         }
 
@@ -131,16 +213,21 @@ namespace
             return;
         }
 
+        openBrowser(url);
+
         std::cout
-            << "Open this URL in your browser:\n\n"
+            << "Your browser should open the Spotify login page.\n"
+            << "If it does not, open this URL manually:\n\n"
             << url << "\n\n"
-            << "After authorization, copy the code and state\n"
-            << "from the redirected URL.\n\n";
+            << "After authorizing, paste the full URL from the\n"
+            << "browser address bar (it starts with your redirect URI).\n\n";
 
-        const auto code = input("Authorization code: ");
-        const auto state = input("OAuth state: ");
+        const auto redirect = input("Redirect URL: ");
 
-        result(dj.authenticate(code, state), dj);
+        if (redirect.empty())
+            return;
+
+        result(dj.handleRedirect(redirect), dj);
         wait();
     }
 
@@ -208,7 +295,7 @@ namespace
                     break;
 
                 case 4:
-                    success = dj.spotify().previousTrack();
+                    success = dj.previous();
                     break;
 
                 case 5:
@@ -277,7 +364,7 @@ namespace
         if (query.empty())
             return;
 
-        auto tracks = dj.search(query, 20);
+        auto tracks = dj.search(query);
 
         printTracks(tracks);
 
@@ -639,11 +726,8 @@ namespace
 
                     if (!query.empty())
                     {
-                        dj.stop();
                         dj.setSearchQuery(query);
-                        std::cout
-                            << "Search updated. Restart AutoDJ "
-                            << "to continue.\n";
+                        std::cout << "Search updated.\n";
                     }
 
                     break;
@@ -666,8 +750,6 @@ namespace
 
                 case 6:
                 {
-                    dj.stop();
-
                     auto artist = input("Favorite artist: ");
 
                     if (!artist.empty())
@@ -677,7 +759,6 @@ namespace
                 }
 
                 case 7:
-                    dj.stop();
                     dj.ai().clearHistory();
                     std::cout << "AI history cleared.\n";
                     break;
@@ -697,13 +778,14 @@ namespace
 
         std::cout
             << "Spotify: "
-            << (dj.spotify().isAuthenticated()
+            << (dj.isAuthenticated()
                 ? "CONNECTED" : "DISCONNECTED")
             << "\n"
             << "AutoDJ: "
             << (dj.isRunning()
                 ? "RUNNING" : "STOPPED")
             << "\n"
+            << "Music search: " << dj.getSearchQuery() << "\n"
             << "Bluetooth: "
 #if BLITZDJ_HAS_BLUETOOTH
             << "SUPPORTED\n"
@@ -711,7 +793,7 @@ namespace
             << "UNAVAILABLE\n"
 #endif
             << "\n"
-            << "[1] Connect Spotify\n"
+            << "[1] Spotify Account\n"
             << "[2] Music Player\n"
             << "[3] Search Music\n"
             << "[4] AI Recommendations\n"
@@ -733,6 +815,8 @@ namespace
             << "controller powered by C++17.\n\n"
             << "Features:\n"
             << " - Spotify Web API\n"
+            << " - Saved login sessions\n"
+            << " - Android and iOS core library\n"
             << " - Automatic music selection\n"
             << " - Music recommendations\n"
             << " - Spotify Connect controls\n"
@@ -745,10 +829,20 @@ namespace
 
 int main()
 {
+    enableTerminalColors();
+
+    const auto directory = configDirectory();
+    const auto settingsPath = directory / "settings.json";
+
+    Json settings = loadSettings(settingsPath);
+
     std::string clientId;
 
     if (const char* value = std::getenv("SPOTIFY_CLIENT_ID"))
         clientId = value;
+
+    if (clientId.empty())
+        clientId = settings.value("client_id", std::string());
 
     if (clientId.empty())
     {
@@ -765,19 +859,32 @@ int main()
     BlitzDJConfig config;
 
     config.clientId = clientId;
+    config.sessionPath = (directory / "session.json").string();
     config.autoDJ = true;
     config.autoPlay = false;
-    config.searchQuery = "electronic music";
+    config.searchQuery = settings.value("search_query", std::string("electronic music"));
     config.updateIntervalMs = 5000;
     config.queueThresholdMs = 30000;
+
+    if (const char* redirect = std::getenv("SPOTIFY_REDIRECT_URI"); redirect && *redirect)
+        config.redirectUri = redirect;
 
     BlitzDJ dj(config);
 
     if (!dj.initialize())
     {
-        std::cerr << "Failed to initialize BlitzDJ.\n";
+        std::cerr << "Failed to initialize BlitzDJ: " << dj.getLastError() << "\n";
         return 1;
     }
+
+    for (const auto& artist : settings.value("favorite_artists", Json::array()))
+    {
+        if (artist.is_string())
+            dj.ai().addFavoriteArtist(artist.get<std::string>());
+    }
+
+    settings["client_id"] = clientId;
+    saveSettings(settingsPath, settings);
 
 #if BLITZDJ_HAS_BLUETOOTH
     Bluetooth bluetooth;
@@ -851,6 +958,10 @@ int main()
     }
 
     dj.stop();
+
+    settings["search_query"] = dj.getSearchQuery();
+    settings["favorite_artists"] = dj.ai().getFavoriteArtists();
+    saveSettings(settingsPath, settings);
 
 #if BLITZDJ_HAS_BLUETOOTH
     bluetooth.shutdown();

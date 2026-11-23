@@ -1,10 +1,14 @@
 #pragma once
 
+#include "HttpClient.hpp"
+
+#include <chrono>
 #include <cstdint>
+#include <memory>
+#include <mutex>
+#include <optional>
 #include <string>
 #include <vector>
-#include <chrono>
-#include <optional>
 
 #include <nlohmann/json.hpp>
 
@@ -78,6 +82,9 @@ namespace blitzdj
     class BlitzSpotify
     {
     public:
+        static constexpr int SEARCH_PAGE_LIMIT = 10;
+        static constexpr int SEARCH_MAX_OFFSET = 1000;
+
         explicit BlitzSpotify(
             const std::string& clientId,
             const std::string& redirectUri =
@@ -89,14 +96,24 @@ namespace blitzdj
         BlitzSpotify(const BlitzSpotify&) = delete;
         BlitzSpotify& operator=(const BlitzSpotify&) = delete;
 
-        // Authentication
         bool initialize();
 
+        void setHttpClient(std::unique_ptr<HttpClient> client);
+
+        void setSessionPath(const std::string& path);
+        std::string getSessionPath() const;
+
+        bool loadSession();
+        bool saveSession();
+
         std::string generateAuthorizationUrl();
+
         bool authenticate(
             const std::string& authorizationCode,
             const std::string& returnedState
         );
+
+        bool handleRedirect(const std::string& redirectUrl);
 
         bool refreshAccessToken();
         bool isAuthenticated() const;
@@ -104,22 +121,20 @@ namespace blitzdj
         void logout();
 
         void setTokens(const SpotifyTokens& tokens);
-        const SpotifyTokens& getTokens() const;
+        SpotifyTokens getTokens() const;
 
-        // Spotify profile
         Json getCurrentUser();
 
-        // Music search
         std::vector<SpotifyTrack> searchTracks(
             const std::string& query,
-            int limit = 20
+            int limit = SEARCH_PAGE_LIMIT,
+            int offset = 0
         );
 
         std::optional<SpotifyTrack> getTrack(
             const std::string& trackId
         );
 
-        // Player controls
         bool play();
         bool playTrack(const std::string& trackUri);
 
@@ -143,17 +158,14 @@ namespace blitzdj
         bool setShuffle(bool enabled);
         bool setRepeat(const std::string& mode);
 
-        // Playback queue
         bool addToQueue(const std::string& trackUri);
         Json getQueue();
 
-        // Playback information
         std::optional<SpotifyPlayback> getPlayback();
         std::optional<SpotifyTrack> getCurrentTrack();
 
         bool isPlaying();
 
-        // Devices
         std::vector<SpotifyDevice> getDevices();
 
         bool transferPlayback(
@@ -162,9 +174,8 @@ namespace blitzdj
         );
 
         void setDevice(const std::string& deviceId);
-        const std::string& getDevice() const;
+        std::string getDevice() const;
 
-        // Automatic DJ controls
         void enableAutoDJ(bool enabled);
         bool isAutoDJEnabled() const;
 
@@ -176,18 +187,23 @@ namespace blitzdj
             const std::vector<SpotifyTrack>& tracks
         );
 
-        // Error handling
-        const std::string& getLastError() const;
+        std::string getLastError() const;
         long getLastStatusCode() const;
 
         void clearError();
+
+        static std::string urlEncode(const std::string& value);
+        static std::string urlDecode(const std::string& value);
 
     private:
         std::string clientId_;
         std::string redirectUri_;
         std::string deviceId_;
+        std::string sessionPath_;
 
         SpotifyTokens tokens_;
+
+        std::unique_ptr<HttpClient> http_;
 
         bool initialized_ = false;
         bool autoDJEnabled_ = false;
@@ -198,6 +214,8 @@ namespace blitzdj
         std::string lastError_;
         long lastStatusCode_ = 0;
 
+        mutable std::recursive_mutex mutex_;
+
         static constexpr const char* API_URL =
             "https://api.spotify.com/v1";
 
@@ -207,7 +225,8 @@ namespace blitzdj
         static constexpr const char* TOKEN_URL =
             "https://accounts.spotify.com/api/token";
 
-        // HTTP requests
+        static constexpr int MAX_ATTEMPTS = 3;
+
         SpotifyResponse request(
             const std::string& method,
             const std::string& endpoint,
@@ -218,23 +237,15 @@ namespace blitzdj
             const std::string& formData
         );
 
-        // OAuth PKCE
-        std::string generateCodeVerifier();
-        std::string generateCodeChallenge(
-            const std::string& verifier
+        SpotifyResponse finishResponse(
+            const HttpResponse& response,
+            const std::string& fallbackError
         );
-
-        std::string generateRandomState();
-
-        std::string urlEncode(
-            const std::string& value
-        ) const;
 
         bool updateTokens(const Json& response);
 
         bool ensureValidToken();
 
-        // JSON parsing
         SpotifyTrack parseTrack(const Json& data) const;
 
         SpotifyDevice parseDevice(const Json& data) const;
@@ -243,7 +254,6 @@ namespace blitzdj
             const Json& data
         ) const;
 
-        // Internal helpers
         std::string playerEndpoint(
             const std::string& path
         ) const;

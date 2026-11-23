@@ -4,9 +4,10 @@
 #include "BlitzSpotify.hpp"
 
 #include <atomic>
-#include <chrono>
+#include <condition_variable>
 #include <cstddef>
-#include <memory>
+#include <mutex>
+#include <optional>
 #include <string>
 #include <thread>
 #include <vector>
@@ -19,13 +20,16 @@ namespace blitzdj
         std::string redirectUri =
             "http://127.0.0.1:8888/callback";
 
+        std::string sessionPath;
+
         std::string searchQuery = "electronic music";
 
-        int searchLimit = 50;
+        int searchLimit = 30;
+        int searchOffsetRange = 100;
         int updateIntervalMs = 5000;
         int queueThresholdMs = 30000;
 
-        std::size_t initialQueueSize = 3;
+        std::size_t initialQueueSize = 0;
 
         bool autoDJ = true;
         bool autoPlay = false;
@@ -50,6 +54,12 @@ namespace blitzdj
             const std::string& state
         );
 
+        bool handleRedirect(const std::string& redirectUrl);
+
+        bool isAuthenticated() const;
+
+        void logout();
+
         bool start();
         void stop();
 
@@ -59,6 +69,7 @@ namespace blitzdj
         bool pause();
         bool resume();
         bool skip();
+        bool previous();
 
         bool playTrack(const std::string& trackUri);
 
@@ -69,6 +80,7 @@ namespace blitzdj
         bool queueRecommendedTracks(std::size_t count);
 
         void setSearchQuery(const std::string& query);
+        std::string getSearchQuery() const;
 
         void setAutoDJ(bool enabled);
         bool isAutoDJEnabled() const;
@@ -77,7 +89,7 @@ namespace blitzdj
 
         std::vector<SpotifyTrack> search(
             const std::string& query,
-            int limit = 20
+            int limit = BlitzSpotify::SEARCH_PAGE_LIMIT
         );
 
         std::vector<SpotifyTrack> recommend(
@@ -87,10 +99,12 @@ namespace blitzdj
 
         std::optional<SpotifyPlayback> getPlayback();
 
+        std::string getLastError() const;
+
         BlitzSpotify& spotify();
         BlitzAI& ai();
 
-        const BlitzDJConfig& getConfig() const;
+        BlitzDJConfig getConfig() const;
 
     private:
         BlitzDJConfig config_;
@@ -102,21 +116,32 @@ namespace blitzdj
         std::atomic<bool> autoDJEnabled_{false};
 
         std::thread worker_;
+        std::mutex workerMutex_;
+        std::condition_variable wakeup_;
+
+        mutable std::mutex stateMutex_;
 
         std::string lastQueuedTrackId_;
         std::string lastObservedTrackId_;
+        std::string lastError_;
+
+        std::mt19937 random_;
 
         void runLoop();
 
         bool updateAutoDJ();
-        bool initializeQueue();
 
-        std::vector<SpotifyTrack> fetchCandidates();
+        std::vector<SpotifyTrack> fetchCandidates(
+            const std::string& query,
+            int limit
+        );
 
         bool queueNextRecommendedTrack();
 
         void observePlayback(
             const SpotifyPlayback& playback
         );
+
+        void setError(const std::string& message);
     };
 }
