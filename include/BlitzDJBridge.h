@@ -23,9 +23,11 @@ int blitzdj_previous(blitzdj_handle* handle);
 int blitzdj_set_volume(blitzdj_handle* handle, int volume);
 int blitzdj_seek(blitzdj_handle* handle, int position_ms);
 int blitzdj_set_shuffle(blitzdj_handle* handle, int enabled);
+int blitzdj_set_repeat(blitzdj_handle* handle, const char* mode);
 
 char* blitzdj_playback_json(blitzdj_handle* handle);
 char* blitzdj_devices_json(blitzdj_handle* handle);
+char* blitzdj_queue_json(blitzdj_handle* handle, int limit);
 char* blitzdj_search_json(blitzdj_handle* handle, const char* query, int limit);
 char* blitzdj_recommend_json(blitzdj_handle* handle, const char* query, int count);
 

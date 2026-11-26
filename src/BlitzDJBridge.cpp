@@ -180,6 +180,27 @@ extern "C"
         return guarded(handle, [=](BlitzDJ& dj) { return dj.spotify().setShuffle(enabled != 0) ? 1 : 0; }, 0);
     }
 
+    int blitzdj_set_repeat(blitzdj_handle* handle, const char* mode)
+    {
+        const auto value = safe(mode);
+        return guarded(handle, [&](BlitzDJ& dj) { return dj.spotify().setRepeat(value) ? 1 : 0; }, 0);
+    }
+
+    char* blitzdj_queue_json(blitzdj_handle* handle, int limit)
+    {
+        return guarded(handle, [=](BlitzDJ& dj)
+        {
+            auto tracks = dj.spotify().getQueueTracks();
+
+            if (limit > 0 && tracks.size() > static_cast<std::size_t>(limit))
+            {
+                tracks.resize(static_cast<std::size_t>(limit));
+            }
+
+            return duplicate(tracksJson(tracks).dump());
+        }, nullptr);
+    }
+
     char* blitzdj_playback_json(blitzdj_handle* handle)
     {
         return guarded(handle, [](BlitzDJ& dj)
@@ -199,6 +220,7 @@ extern "C"
                 {"progress_ms", playback->progressMs},
                 {"duration_ms", playback->durationMs},
                 {"track", trackJson(playback->track)},
+                {"auto_dj", dj.isRunning()},
                 {"device", {
                     {"id", playback->device.id},
                     {"name", playback->device.name},

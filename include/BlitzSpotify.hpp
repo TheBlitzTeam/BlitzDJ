@@ -160,6 +160,7 @@ namespace blitzdj
 
         bool addToQueue(const std::string& trackUri);
         Json getQueue();
+        std::vector<SpotifyTrack> getQueueTracks();
 
         std::optional<SpotifyPlayback> getPlayback();
         std::optional<SpotifyTrack> getCurrentTrack();

@@ -1,37 +1,89 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">BlitzDJ</string>
-    <string name="tagline">Intelligent Music Player</string>
+    <string name="tagline">Your intelligent party DJ, powered by Spotify.</string>
     <string name="client_id_hint">Spotify Client ID</string>
-    <string name="redirect_hint">Redirect URI to register in the Spotify dashboard: blitzdj://callback</string>
-    <string name="connect">Connect Spotify</string>
+    <string name="redirect_hint">Redirect URI: blitzdj://callback</string>
+    <string name="connect">Connect with Spotify</string>
     <string name="logout">Log out</string>
-    <string name="connected">Connected to Spotify</string>
-    <string name="disconnected">Not connected</string>
-    <string name="nothing_playing">Nothing playing</string>
-    <string name="open_spotify_hint">Start Spotify on any device, then control it here.</string>
-    <string name="open_spotify">Open Spotify</string>
-    <string name="devices">Devices</string>
-    <string name="previous">⏮</string>
-    <string name="play">▶</string>
-    <string name="pause">⏸</string>
-    <string name="next">⏭</string>
-    <string name="volume">Volume</string>
-    <string name="auto_dj">AutoDJ</string>
-    <string name="auto_dj_query_hint">Genre, mood or artist</string>
-    <string name="queue_recommendations">Queue 5 picks</string>
-    <string name="search_hint">Search tracks</string>
-    <string name="search">Search</string>
-    <string name="queue">Queue</string>
-    <string name="play_track">Play</string>
-    <string name="use_device">Use</string>
-    <string name="no_results">No results.</string>
-    <string name="no_devices">No Spotify devices found. Open Spotify first.</string>
-    <string name="client_id_required">Enter your Spotify Client ID first.</string>
     <string name="login_success">Spotify connected.</string>
+    <string name="client_id_required">Enter your Spotify Client ID first.</string>
+    <string name="nav_player">Player</string>
+    <string name="nav_auto_dj">AutoDJ</string>
+    <string name="nav_search">Search</string>
+    <string name="nav_speakers">Speakers</string>
+    <string name="now_playing">Now playing</string>
+    <string name="playing_on">Playing on %1$s</string>
+    <string name="nothing_playing">Nothing playing</string>
+    <string name="open_spotify_hint">Start Spotify on any device</string>
+    <string name="album_art">Album art</string>
+    <string name="progress">Track progress</string>
+    <string name="zero_time">0:00</string>
+    <string name="shuffle">Shuffle</string>
+    <string name="repeat">Repeat</string>
+    <string name="previous">Previous</string>
+    <string name="play">Play</string>
+    <string name="pause">Pause</string>
+    <string name="next">Next</string>
+    <string name="volume">Volume</string>
+    <string name="favorite_artist">Favorite artist</string>
+    <string name="favorite_added">%1$s added to favorites.</string>
+    <string name="devices">Devices</string>
+    <string name="up_next">Up next</string>
+    <string name="queue_empty">The queue is empty.</string>
+    <string name="auto_dj">AutoDJ</string>
+    <string name="auto_dj_off">Off — tap to set it up</string>
+    <string name="auto_dj_on">Queueing %1$s</string>
+    <string name="auto_dj_enable">Enable AutoDJ</string>
+    <string name="auto_dj_description">BlitzDJ picks and queues new tracks before the current one ends, avoiding repeats and mixing artists.</string>
+    <string name="auto_dj_query_hint">Genre, mood or artist</string>
+    <string name="queue_recommendations">Queue 5 picks now</string>
+    <string name="suggestions">Suggestions</string>
+    <string name="suggestions_empty">Tap refresh to preview what AutoDJ would play.</string>
+    <string name="refresh">Refresh</string>
+    <string name="search_hint">Songs, artists or albums</string>
+    <string name="search_empty">Search Spotify and play or queue any track.</string>
+    <string name="no_results">No results.</string>
+    <string name="queue">Add to queue</string>
+    <string name="queued">Added to the queue.</string>
     <string name="done">Done.</string>
+    <string name="current_output">Audio output</string>
+    <string name="phone_speaker">Phone speaker</string>
+    <string name="wired_output">Wired audio</string>
+    <string name="switch_output">Switch</string>
+    <string name="party_mode">Party mode</string>
+    <string name="party_mode_description">Keeps the screen awake, resumes the music when a Bluetooth speaker reconnects, and keeps AutoDJ running.</string>
+    <string name="party_resumed">Speaker reconnected — music resumed.</string>
+    <string name="bluetooth_speakers">Bluetooth speakers</string>
+    <string name="bluetooth_empty">No paired Bluetooth speakers.</string>
+    <string name="bluetooth_off">Bluetooth is off.</string>
+    <string name="bluetooth_permission">Allow Bluetooth access to see your speakers.</string>
+    <string name="allow_bluetooth">Allow Bluetooth</string>
+    <string name="pair_new">Pair</string>
+    <string name="connected">Connected</string>
+    <string name="playing_here">Playing audio</string>
+    <string name="paired">Paired</string>
+    <string name="connect_device">Connect</string>
+    <string name="disconnect_device">Disconnect</string>
+    <string name="use_device">Play here</string>
+    <string name="active_device">Active</string>
+    <string name="spotify_connect">Spotify Connect</string>
+    <string name="no_devices">No Spotify devices found. Open Spotify on a phone, computer or speaker.</string>
+    <string name="open_spotify">Open Spotify</string>
+    <string name="bluetooth_connect_fallback">Choose the speaker in the Bluetooth settings.</string>
+    <string name="volume_percent">Volume %1$d%%</string>
     <string name="channel_name">AutoDJ</string>
     <string name="notification_title">BlitzDJ AutoDJ is running</string>
     <string name="notification_text">Queueing music for: %1$s</string>
     <string name="stop">Stop</string>
+    <string-array name="moods">
+        <item>Party</item>
+        <item>Funk</item>
+        <item>Pop</item>
+        <item>Electronic</item>
+        <item>Hip-hop</item>
+        <item>Sertanejo</item>
+        <item>Rock</item>
+        <item>Lo-fi</item>
+    </string-array>
 </resources>

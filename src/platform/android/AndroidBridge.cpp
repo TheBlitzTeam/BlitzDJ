@@ -172,6 +172,17 @@ extern "C"
         return flag(blitzdj_set_shuffle(handleOf(handle), enabled == JNI_TRUE ? 1 : 0));
     }
 
+    JNIEXPORT jboolean JNICALL BLITZDJ_JNI(setRepeat)(JNIEnv* env, jobject, jlong handle, jstring mode)
+    {
+        const auto value = fromJava(env, mode);
+        return flag(blitzdj_set_repeat(handleOf(handle), value.c_str()));
+    }
+
+    JNIEXPORT jstring JNICALL BLITZDJ_JNI(queueJson)(JNIEnv* env, jobject, jlong handle, jint limit)
+    {
+        return toJava(env, blitzdj_queue_json(handleOf(handle), limit), "[]");
+    }
+
     JNIEXPORT jstring JNICALL BLITZDJ_JNI(playbackJson)(JNIEnv* env, jobject, jlong handle)
     {
         return toJava(env, blitzdj_playback_json(handleOf(handle)), "{\"active\":false}");

@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tagline">Seu DJ inteligente para festas, com Spotify.</string>
+    <string name="client_id_hint">Client ID do Spotify</string>
+    <string name="redirect_hint">Redirect URI: blitzdj://callback</string>
+    <string name="connect">Conectar com Spotify</string>
+    <string name="logout">Sair da conta</string>
+    <string name="login_success">Spotify conectado.</string>
+    <string name="client_id_required">Informe o Client ID do Spotify primeiro.</string>
+    <string name="nav_player">Player</string>
+    <string name="nav_auto_dj">AutoDJ</string>
+    <string name="nav_search">Buscar</string>
+    <string name="nav_speakers">Caixas</string>
+    <string name="now_playing">Tocando agora</string>
+    <string name="playing_on">Tocando em %1$s</string>
+    <string name="nothing_playing">Nada tocando</string>
+    <string name="open_spotify_hint">Abra o Spotify em algum dispositivo</string>
+    <string name="album_art">Capa do álbum</string>
+    <string name="progress">Progresso da música</string>
+    <string name="shuffle">Aleatório</string>
+    <string name="repeat">Repetir</string>
+    <string name="previous">Anterior</string>
+    <string name="play">Tocar</string>
+    <string name="pause">Pausar</string>
+    <string name="next">Próxima</string>
+    <string name="volume">Volume</string>
+    <string name="favorite_artist">Artista favorito</string>
+    <string name="favorite_added">%1$s adicionado aos favoritos.</string>
+    <string name="devices">Dispositivos</string>
+    <string name="up_next">A seguir</string>
+    <string name="queue_empty">A fila está vazia.</string>
+    <string name="auto_dj_off">Desligado — toque para configurar</string>
+    <string name="auto_dj_on">Tocando %1$s</string>
+    <string name="auto_dj_enable">Ativar AutoDJ</string>
+    <string name="auto_dj_description">O BlitzDJ escolhe e enfileira músicas novas antes da atual acabar, evitando repetições e variando os artistas.</string>
+    <string name="auto_dj_query_hint">Gênero, clima ou artista</string>
+    <string name="queue_recommendations">Enfileirar 5 agora</string>
+    <string name="suggestions">Sugestões</string>
+    <string name="suggestions_empty">Toque em atualizar para ver o que o AutoDJ tocaria.</string>
+    <string name="refresh">Atualizar</string>
+    <string name="search_hint">Músicas, artistas ou álbuns</string>
+    <string name="search_empty">Busque no Spotify e toque ou enfileire qualquer música.</string>
+    <string name="no_results">Nenhum resultado.</string>
+    <string name="queue">Adicionar à fila</string>
+    <string name="queued">Adicionada à fila.</string>
+    <string name="done">Pronto.</string>
+    <string name="current_output">Saída de áudio</string>
+    <string name="phone_speaker">Alto-falante do celular</string>
+    <string name="wired_output">Áudio com fio</string>
+    <string name="switch_output">Trocar</string>
+    <string name="party_mode">Modo festa</string>
+    <string name="party_mode_description">Mantém a tela ligada, volta a tocar quando a caixa Bluetooth reconecta e mantém o AutoDJ rodando.</string>
+    <string name="party_resumed">Caixa reconectada — música retomada.</string>
+    <string name="bluetooth_speakers">Caixas Bluetooth</string>
+    <string name="bluetooth_empty">Nenhuma caixa Bluetooth pareada.</string>
+    <string name="bluetooth_off">O Bluetooth está desligado.</string>
+    <string name="bluetooth_permission">Permita o acesso ao Bluetooth para ver suas caixas.</string>
+    <string name="allow_bluetooth">Permitir Bluetooth</string>
+    <string name="pair_new">Parear</string>
+    <string name="connected">Conectada</string>
+    <string name="playing_here">Tocando áudio</string>
+    <string name="paired">Pareada</string>
+    <string name="connect_device">Conectar</string>
+    <string name="disconnect_device">Desconectar</string>
+    <string name="use_device">Tocar aqui</string>
+    <string name="active_device">Ativo</string>
+    <string name="spotify_connect">Spotify Connect</string>
+    <string name="no_devices">Nenhum dispositivo do Spotify encontrado. Abra o Spotify em um celular, computador ou caixa.</string>
+    <string name="open_spotify">Abrir Spotify</string>
+    <string name="bluetooth_connect_fallback">Escolha a caixa nas configurações de Bluetooth.</string>
+    <string name="volume_percent">Volume %1$d%%</string>
+    <string name="notification_title">AutoDJ do BlitzDJ ativo</string>
+    <string name="notification_text">Enfileirando músicas de: %1$s</string>
+    <string name="stop">Parar</string>
+    <string-array name="moods">
+        <item>Festa</item>
+        <item>Funk</item>
+        <item>Pop</item>
+        <item>Eletrônica</item>
+        <item>Hip-hop</item>
+        <item>Sertanejo</item>
+        <item>Rock</item>
+        <item>Lo-fi</item>
+    </string-array>
+</resources>

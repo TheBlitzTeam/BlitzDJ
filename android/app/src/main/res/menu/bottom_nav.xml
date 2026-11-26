@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/nav_player"
+        android:icon="@drawable/ic_music"
+        android:title="@string/nav_player" />
+    <item
+        android:id="@+id/nav_auto_dj"
+        android:icon="@drawable/ic_bolt"
+        android:title="@string/nav_auto_dj" />
+    <item
+        android:id="@+id/nav_search"
+        android:icon="@drawable/ic_search"
+        android:title="@string/nav_search" />
+    <item
+        android:id="@+id/nav_speakers"
+        android:icon="@drawable/ic_speaker"
+        android:title="@string/nav_speakers" />
+</menu>

@@ -1,61 +1,165 @@
 package com.theblitzteam.blitzdj
 
 import android.Manifest
-import android.app.Activity
 import android.content.Intent
-import android.content.pm.PackageManager
+import android.content.res.ColorStateList
+import android.graphics.Bitmap
+import android.graphics.RenderEffect
+import android.graphics.Shader
+import android.graphics.drawable.BitmapDrawable
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.view.View
+import android.view.WindowManager
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
-import android.widget.Button
-import android.widget.EditText
-import android.widget.LinearLayout
-import android.widget.ProgressBar
-import android.widget.SeekBar
-import android.widget.Switch
+import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
+import androidx.core.graphics.ColorUtils
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.doOnLayout
+import androidx.palette.graphics.Palette
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import coil.load
+import com.google.android.material.bottomnavigation.BottomNavigationView
+import com.google.android.material.button.MaterialButton
+import com.google.android.material.card.MaterialCardView
+import com.google.android.material.chip.Chip
+import com.google.android.material.chip.ChipGroup
+import com.google.android.material.floatingactionbutton.FloatingActionButton
+import com.google.android.material.imageview.ShapeableImageView
+import com.google.android.material.materialswitch.MaterialSwitch
+import com.google.android.material.progressindicator.LinearProgressIndicator
+import com.google.android.material.slider.Slider
+import com.google.android.material.textfield.TextInputEditText
 import org.json.JSONArray
 import org.json.JSONObject
+import kotlin.math.min
 
-class MainActivity : Activity() {
+class MainActivity : AppCompatActivity() {
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    private lateinit var statusText: TextView
-    private lateinit var loginPanel: View
-    private lateinit var clientIdInput: EditText
-    private lateinit var connectButton: Button
-    private lateinit var playerPanel: View
-    private lateinit var trackName: TextView
+    private lateinit var root: View
+    private lateinit var content: View
+    private lateinit var backgroundArt: ImageView
+    private lateinit var backgroundTint: View
+    private lateinit var loginOverlay: View
+    private lateinit var clientIdInput: TextInputEditText
+    private lateinit var connectButton: MaterialButton
+    private lateinit var bottomNav: BottomNavigationView
+
+    private lateinit var pagePlayer: View
+    private lateinit var pageAutoDj: View
+    private lateinit var pageSearch: View
+    private lateinit var pageSpeakers: View
+
+    private lateinit var playingFrom: TextView
+    private lateinit var deviceChip: MaterialButton
+    private lateinit var albumArt: ShapeableImageView
+    private lateinit var trackTitle: TextView
     private lateinit var trackArtist: TextView
-    private lateinit var trackProgress: ProgressBar
-    private lateinit var deviceText: TextView
-    private lateinit var previousButton: Button
-    private lateinit var playPauseButton: Button
-    private lateinit var nextButton: Button
-    private lateinit var volumeBar: SeekBar
-    private lateinit var openSpotifyButton: Button
-    private lateinit var devicesButton: Button
-    private lateinit var autoDjPanel: View
-    private lateinit var autoDjSwitch: Switch
-    private lateinit var autoDjQuery: EditText
-    private lateinit var queueButton: Button
-    private lateinit var searchPanel: View
-    private lateinit var searchInput: EditText
-    private lateinit var searchButton: Button
-    private lateinit var resultsContainer: LinearLayout
+    private lateinit var trackAlbum: TextView
+    private lateinit var favoriteButton: MaterialButton
+    private lateinit var progressSlider: Slider
+    private lateinit var elapsedTime: TextView
+    private lateinit var totalTime: TextView
+    private lateinit var shuffleButton: MaterialButton
+    private lateinit var previousButton: MaterialButton
+    private lateinit var playPauseButton: FloatingActionButton
+    private lateinit var nextButton: MaterialButton
+    private lateinit var repeatButton: MaterialButton
+    private lateinit var volumeSlider: Slider
+    private lateinit var autoDjCard: MaterialCardView
+    private lateinit var autoDjIcon: ImageView
+    private lateinit var autoDjStatus: TextView
+    private lateinit var playerAutoDjSwitch: MaterialSwitch
+    private lateinit var queueTitle: TextView
+    private lateinit var queueList: RecyclerView
+
+    private lateinit var autoDjSwitch: MaterialSwitch
+    private lateinit var autoDjQuery: TextInputEditText
+    private lateinit var moodChips: ChipGroup
+    private lateinit var queueButton: MaterialButton
+    private lateinit var refreshSuggestions: MaterialButton
+    private lateinit var suggestionProgress: LinearProgressIndicator
+    private lateinit var suggestionEmpty: TextView
+    private lateinit var suggestionList: RecyclerView
+
+    private lateinit var searchInput: TextInputEditText
+    private lateinit var searchProgress: LinearProgressIndicator
+    private lateinit var searchEmpty: TextView
+    private lateinit var searchResults: RecyclerView
+
+    private lateinit var outputIcon: ShapeableImageView
+    private lateinit var outputName: TextView
+    private lateinit var outputSwitchButton: MaterialButton
+    private lateinit var partySwitch: MaterialSwitch
+    private lateinit var bluetoothSettingsButton: MaterialButton
+    private lateinit var bluetoothEmpty: TextView
+    private lateinit var bluetoothPermissionButton: MaterialButton
+    private lateinit var bluetoothList: RecyclerView
+    private lateinit var refreshDevices: MaterialButton
+    private lateinit var connectEmpty: TextView
+    private lateinit var connectList: RecyclerView
+    private lateinit var openSpotifyButton: MaterialButton
+    private lateinit var logoutButton: MaterialButton
+
+    private lateinit var miniPlayer: MaterialCardView
+    private lateinit var miniArt: ShapeableImageView
+    private lateinit var miniTitle: TextView
+    private lateinit var miniArtist: TextView
+    private lateinit var miniPlayPause: MaterialButton
+    private lateinit var miniNext: MaterialButton
+    private lateinit var miniProgress: LinearProgressIndicator
+
+    private lateinit var speakers: SpeakerManager
+
+    private val queueAdapter = TrackAdapter(onPlay = { playUri(it.uri) }, onQueue = null)
+    private val suggestionAdapter = TrackAdapter(onPlay = { playUri(it.uri) }, onQueue = { queueUri(it.uri) })
+    private val searchAdapter = TrackAdapter(onPlay = { playUri(it.uri) }, onQueue = { queueUri(it.uri) })
+    private val bluetoothAdapter = DeviceAdapter()
+    private val connectAdapter = DeviceAdapter()
 
     private var authenticated = false
+    private var hasPlayback = false
     private var playing = false
-    private var polling = false
-    private var pollInFlight = false
-    private var updatingControls = false
+    private var shuffle = false
+    private var repeatMode = "off"
+    private var durationMs = 0
+    private var progressMs = 0
+    private var progressUpdatedAt = 0L
+    private var currentTrackId = ""
+    private var currentImageUrl = ""
+    private var currentArtist = ""
+    private var autoDjRunning = false
+    private var draggingProgress = false
     private var draggingVolume = false
+    private var updatingControls = false
+    private var pollInFlight = false
+    private var polling = false
+    private var currentPage = R.id.nav_player
+    private var lastOutputType: SpeakerManager.OutputType? = null
+    private var resumeOnReconnect = false
+    private var partyMode = false
+
+    private val bluetoothPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
+        speakers.connectProfile()
+        refreshSpeakers()
+    }
+
+    private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
     private val pollRunnable = object : Runnable {
         override fun run() {
@@ -68,17 +172,40 @@ class MainActivity : Activity() {
         }
     }
 
+    private val tickRunnable = object : Runnable {
+        override fun run() {
+            if (!polling) {
+                return
+            }
+
+            renderProgress()
+            mainHandler.postDelayed(this, TICK_INTERVAL_MS)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         setContentView(R.layout.activity_main)
 
         bindViews()
-        bindActions()
+        setupInsets()
+        setupLists()
+        setupPlayer()
+        setupAutoDj()
+        setupSearch()
+        setupSpeakers()
+        setupLogin()
 
-        clientIdInput.setText(BlitzClient.savedClientId(this))
-        autoDjQuery.setText(BlitzClient.savedQuery(this))
+        speakers = SpeakerManager(this) { mainHandler.post { onSpeakersChanged() } }
 
-        updateAccountUi()
+        partyMode = BlitzClient.partyMode(this)
+        updatingControls = true
+        partySwitch.isChecked = partyMode
+        updatingControls = false
+        applyPartyMode()
+
+        showPage(R.id.nav_player)
 
         if (isRedirect(intent)) {
             BlitzClient.autoLoginAttempted = true
@@ -97,67 +224,251 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         polling = true
+        speakers.start()
+        onSpeakersChanged()
         mainHandler.post(pollRunnable)
+        mainHandler.post(tickRunnable)
     }
 
     override fun onPause() {
         polling = false
         mainHandler.removeCallbacks(pollRunnable)
+        mainHandler.removeCallbacks(tickRunnable)
+
+        if (!partyMode) {
+            speakers.stop()
+        }
+
         super.onPause()
     }
 
+    override fun onDestroy() {
+        speakers.stop()
+        super.onDestroy()
+    }
+
     private fun bindViews() {
-        statusText = findViewById(R.id.statusText)
-        loginPanel = findViewById(R.id.loginPanel)
+        root = findViewById(R.id.root)
+        content = findViewById(R.id.content)
+        backgroundArt = findViewById(R.id.backgroundArt)
+        backgroundTint = findViewById(R.id.backgroundTint)
+        loginOverlay = findViewById(R.id.loginOverlay)
         clientIdInput = findViewById(R.id.clientIdInput)
         connectButton = findViewById(R.id.connectButton)
-        playerPanel = findViewById(R.id.playerPanel)
-        trackName = findViewById(R.id.trackName)
+        bottomNav = findViewById(R.id.bottomNav)
+
+        pagePlayer = findViewById(R.id.pagePlayer)
+        pageAutoDj = findViewById(R.id.pageAutoDj)
+        pageSearch = findViewById(R.id.pageSearch)
+        pageSpeakers = findViewById(R.id.pageSpeakers)
+
+        playingFrom = findViewById(R.id.playingFrom)
+        deviceChip = findViewById(R.id.deviceChip)
+        albumArt = findViewById(R.id.albumArt)
+        trackTitle = findViewById(R.id.trackTitle)
         trackArtist = findViewById(R.id.trackArtist)
-        trackProgress = findViewById(R.id.trackProgress)
-        deviceText = findViewById(R.id.deviceText)
+        trackAlbum = findViewById(R.id.trackAlbum)
+        favoriteButton = findViewById(R.id.favoriteButton)
+        progressSlider = findViewById(R.id.progressSlider)
+        elapsedTime = findViewById(R.id.elapsedTime)
+        totalTime = findViewById(R.id.totalTime)
+        shuffleButton = findViewById(R.id.shuffleButton)
         previousButton = findViewById(R.id.previousButton)
         playPauseButton = findViewById(R.id.playPauseButton)
         nextButton = findViewById(R.id.nextButton)
-        volumeBar = findViewById(R.id.volumeBar)
-        openSpotifyButton = findViewById(R.id.openSpotifyButton)
-        devicesButton = findViewById(R.id.devicesButton)
-        autoDjPanel = findViewById(R.id.autoDjPanel)
+        repeatButton = findViewById(R.id.repeatButton)
+        volumeSlider = findViewById(R.id.volumeSlider)
+        autoDjCard = findViewById(R.id.autoDjCard)
+        autoDjIcon = findViewById(R.id.autoDjIcon)
+        autoDjStatus = findViewById(R.id.autoDjStatus)
+        playerAutoDjSwitch = findViewById(R.id.playerAutoDjSwitch)
+        queueTitle = findViewById(R.id.queueTitle)
+        queueList = findViewById(R.id.queueList)
+
         autoDjSwitch = findViewById(R.id.autoDjSwitch)
         autoDjQuery = findViewById(R.id.autoDjQuery)
+        moodChips = findViewById(R.id.moodChips)
         queueButton = findViewById(R.id.queueButton)
-        searchPanel = findViewById(R.id.searchPanel)
+        refreshSuggestions = findViewById(R.id.refreshSuggestions)
+        suggestionProgress = findViewById(R.id.suggestionProgress)
+        suggestionEmpty = findViewById(R.id.suggestionEmpty)
+        suggestionList = findViewById(R.id.suggestionList)
+
         searchInput = findViewById(R.id.searchInput)
-        searchButton = findViewById(R.id.searchButton)
-        resultsContainer = findViewById(R.id.resultsContainer)
+        searchProgress = findViewById(R.id.searchProgress)
+        searchEmpty = findViewById(R.id.searchEmpty)
+        searchResults = findViewById(R.id.searchResults)
+
+        outputIcon = findViewById(R.id.outputIcon)
+        outputName = findViewById(R.id.outputName)
+        outputSwitchButton = findViewById(R.id.outputSwitchButton)
+        partySwitch = findViewById(R.id.partySwitch)
+        bluetoothSettingsButton = findViewById(R.id.bluetoothSettingsButton)
+        bluetoothEmpty = findViewById(R.id.bluetoothEmpty)
+        bluetoothPermissionButton = findViewById(R.id.bluetoothPermissionButton)
+        bluetoothList = findViewById(R.id.bluetoothList)
+        refreshDevices = findViewById(R.id.refreshDevices)
+        connectEmpty = findViewById(R.id.connectEmpty)
+        connectList = findViewById(R.id.connectList)
+        openSpotifyButton = findViewById(R.id.openSpotifyButton)
+        logoutButton = findViewById(R.id.logoutButton)
+
+        miniPlayer = findViewById(R.id.miniPlayer)
+        miniArt = findViewById(R.id.miniArt)
+        miniTitle = findViewById(R.id.miniTitle)
+        miniArtist = findViewById(R.id.miniArtist)
+        miniPlayPause = findViewById(R.id.miniPlayPause)
+        miniNext = findViewById(R.id.miniNext)
+        miniProgress = findViewById(R.id.miniProgress)
     }
 
-    private fun bindActions() {
-        connectButton.setOnClickListener { onConnectClicked() }
-
-        previousButton.setOnClickListener { command { NativeBridge.previous(it) } }
-        nextButton.setOnClickListener { command { NativeBridge.next(it) } }
-        playPauseButton.setOnClickListener {
-            val pause = playing
-            command { if (pause) NativeBridge.pause(it) else NativeBridge.play(it) }
+    private fun setupInsets() {
+        ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            content.setPadding(bars.left, bars.top, bars.right, 0)
+            loginOverlay.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+            insets
         }
 
-        volumeBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(bar: SeekBar, progress: Int, fromUser: Boolean) = Unit
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            backgroundArt.setRenderEffect(RenderEffect.createBlurEffect(90f, 90f, Shader.TileMode.CLAMP))
+        } else {
+            backgroundArt.alpha = 0.25f
+        }
 
-            override fun onStartTrackingTouch(bar: SeekBar) {
+        albumArt.doOnLayout { view ->
+            val screenHeight = resources.displayMetrics.heightPixels
+            val size = min(view.width, (screenHeight * 0.42f).toInt())
+            val params = view.layoutParams
+            params.width = size
+            params.height = size
+            view.layoutParams = params
+        }
+    }
+
+    private fun setupLists() {
+        listOf(
+            queueList to queueAdapter,
+            suggestionList to suggestionAdapter,
+            searchResults to searchAdapter,
+            bluetoothList to bluetoothAdapter,
+            connectList to connectAdapter
+        ).forEach { (list, adapter) ->
+            list.layoutManager = LinearLayoutManager(this)
+            list.adapter = adapter
+            list.itemAnimator = null
+        }
+    }
+
+    private fun setupPlayer() {
+        bottomNav.setOnItemSelectedListener { item ->
+            showPage(item.itemId)
+            true
+        }
+
+        bottomNav.setOnItemReselectedListener { }
+
+        deviceChip.setOnClickListener { bottomNav.selectedItemId = R.id.nav_speakers }
+        miniPlayer.setOnClickListener { bottomNav.selectedItemId = R.id.nav_player }
+        autoDjCard.setOnClickListener { bottomNav.selectedItemId = R.id.nav_auto_dj }
+
+        playPauseButton.setOnClickListener { togglePlayback() }
+        miniPlayPause.setOnClickListener { togglePlayback() }
+        previousButton.setOnClickListener { command { NativeBridge.previous(it) } }
+        nextButton.setOnClickListener { command { NativeBridge.next(it) } }
+        miniNext.setOnClickListener { command { NativeBridge.next(it) } }
+
+        shuffleButton.setOnClickListener {
+            val enabled = !shuffle
+            shuffle = enabled
+            renderModes()
+            command { NativeBridge.setShuffle(it, enabled) }
+        }
+
+        repeatButton.setOnClickListener {
+            val next = when (repeatMode) {
+                "off" -> "context"
+                "context" -> "track"
+                else -> "off"
+            }
+
+            repeatMode = next
+            renderModes()
+            command { NativeBridge.setRepeat(it, next) }
+        }
+
+        favoriteButton.setOnClickListener {
+            val artist = currentArtist.substringBefore(",").trim()
+
+            if (artist.isNotEmpty()) {
+                background({ NativeBridge.addFavoriteArtist(it, artist); true }) {
+                    toast(getString(R.string.favorite_added, artist))
+                }
+            }
+        }
+
+        progressSlider.addOnSliderTouchListener(object : Slider.OnSliderTouchListener {
+            override fun onStartTrackingTouch(slider: Slider) {
+                draggingProgress = true
+            }
+
+            override fun onStopTrackingTouch(slider: Slider) {
+                draggingProgress = false
+
+                if (durationMs <= 0) {
+                    return
+                }
+
+                val position = (slider.value / PROGRESS_SCALE * durationMs).toInt()
+                progressMs = position
+                progressUpdatedAt = SystemClock.elapsedRealtime()
+                command { NativeBridge.seek(it, position) }
+            }
+        })
+
+        progressSlider.addOnChangeListener { _, value, fromUser ->
+            if (fromUser && durationMs > 0) {
+                elapsedTime.text = formatTime((value / PROGRESS_SCALE * durationMs).toInt())
+            }
+        }
+
+        volumeSlider.setLabelFormatter { value -> "${value.toInt()}%" }
+        volumeSlider.addOnSliderTouchListener(object : Slider.OnSliderTouchListener {
+            override fun onStartTrackingTouch(slider: Slider) {
                 draggingVolume = true
             }
 
-            override fun onStopTrackingTouch(bar: SeekBar) {
+            override fun onStopTrackingTouch(slider: Slider) {
                 draggingVolume = false
-                val volume = bar.progress
+                val volume = slider.value.toInt()
                 command(refresh = false) { NativeBridge.setVolume(it, volume) }
             }
         })
 
-        openSpotifyButton.setOnClickListener { openSpotify() }
-        devicesButton.setOnClickListener { showDevices() }
+        playerAutoDjSwitch.setOnCheckedChangeListener { _, checked ->
+            if (!updatingControls) {
+                setAutoDJ(checked)
+            }
+        }
+    }
+
+    private fun setupAutoDj() {
+        autoDjQuery.setText(BlitzClient.savedQuery(this))
+
+        resources.getStringArray(R.array.moods).forEach { mood ->
+            val chip = Chip(this).apply {
+                text = mood
+                isCheckable = true
+                isCheckedIconVisible = false
+                setOnClickListener {
+                    autoDjQuery.setText(mood)
+                    applyQuery()
+                    loadSuggestions()
+                }
+            }
+
+            moodChips.addView(chip)
+        }
 
         autoDjSwitch.setOnCheckedChangeListener { _, checked ->
             if (!updatingControls) {
@@ -169,6 +480,7 @@ class MainActivity : Activity() {
             if (actionId == EditorInfo.IME_ACTION_DONE) {
                 applyQuery()
                 hideKeyboard()
+                loadSuggestions()
                 true
             } else {
                 false
@@ -177,13 +489,19 @@ class MainActivity : Activity() {
 
         queueButton.setOnClickListener {
             val query = applyQuery()
+
             command(message = getString(R.string.done)) {
                 NativeBridge.setSearchQuery(it, query)
                 NativeBridge.queueRecommendations(it, 5)
             }
+
+            mainHandler.postDelayed({ loadQueue() }, 1200)
         }
 
-        searchButton.setOnClickListener { search() }
+        refreshSuggestions.setOnClickListener { loadSuggestions() }
+    }
+
+    private fun setupSearch() {
         searchInput.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_SEARCH) {
                 search()
@@ -194,22 +512,77 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun onConnectClicked() {
-        if (authenticated) {
-            AutoDJService.stop(this)
-            background({ NativeBridge.logout(it); true }) { refreshAccount() }
-            return
+    private fun setupSpeakers() {
+        outputSwitchButton.setOnClickListener { speakers.openOutputPicker(this) }
+        bluetoothSettingsButton.setOnClickListener { speakers.openBluetoothSettings(this) }
+        refreshDevices.setOnClickListener { loadConnectDevices() }
+        openSpotifyButton.setOnClickListener { openSpotify() }
+        logoutButton.setOnClickListener { logout() }
+
+        bluetoothPermissionButton.setOnClickListener {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                bluetoothPermission.launch(Manifest.permission.BLUETOOTH_CONNECT)
+            }
         }
 
-        val clientId = clientIdInput.text.toString().trim()
+        partySwitch.setOnCheckedChangeListener { _, checked ->
+            if (!updatingControls) {
+                partyMode = checked
+                BlitzClient.savePartyMode(this, checked)
+                applyPartyMode()
 
-        if (clientId.isEmpty()) {
-            toast(getString(R.string.client_id_required))
-            return
+                if (checked && !autoDjRunning) {
+                    setAutoDJ(true)
+                }
+            }
         }
+    }
 
-        BlitzClient.saveClientId(this, clientId)
-        startLogin()
+    private fun setupLogin() {
+        clientIdInput.setText(BlitzClient.savedClientId(this))
+
+        connectButton.setOnClickListener {
+            val clientId = clientIdInput.text?.toString()?.trim().orEmpty()
+
+            if (clientId.isEmpty()) {
+                toast(getString(R.string.client_id_required))
+                return@setOnClickListener
+            }
+
+            BlitzClient.saveClientId(this, clientId)
+            startLogin()
+        }
+    }
+
+    private fun showPage(id: Int) {
+        currentPage = id
+
+        pagePlayer.visibility = if (id == R.id.nav_player) View.VISIBLE else View.GONE
+        pageAutoDj.visibility = if (id == R.id.nav_auto_dj) View.VISIBLE else View.GONE
+        pageSearch.visibility = if (id == R.id.nav_search) View.VISIBLE else View.GONE
+        pageSpeakers.visibility = if (id == R.id.nav_speakers) View.VISIBLE else View.GONE
+
+        updateMiniPlayer()
+
+        when (id) {
+            R.id.nav_player -> loadQueue()
+            R.id.nav_auto_dj -> if (suggestionAdapter.isEmpty()) loadSuggestions()
+            R.id.nav_speakers -> {
+                refreshSpeakers()
+                loadConnectDevices()
+            }
+        }
+    }
+
+    private fun showLogin(visible: Boolean) {
+        loginOverlay.visibility = if (visible) View.VISIBLE else View.GONE
+        bottomNav.visibility = if (visible) View.GONE else View.VISIBLE
+        updateMiniPlayer()
+    }
+
+    private fun updateMiniPlayer() {
+        val visible = authenticated && hasPlayback && currentPage != R.id.nav_player
+        miniPlayer.visibility = if (visible) View.VISIBLE else View.GONE
     }
 
     private fun startLogin() {
@@ -257,17 +630,14 @@ class MainActivity : Activity() {
         BlitzClient.executor.execute {
             val handle = BlitzClient.handle(this)
             val isAuthenticated = handle != 0L && NativeBridge.isAuthenticated(handle)
-            val autoDjRunning = handle != 0L && NativeBridge.isAutoDJRunning(handle)
 
             mainHandler.post {
                 authenticated = isAuthenticated
-                updatingControls = true
-                autoDjSwitch.isChecked = autoDjRunning
-                updatingControls = false
-                updateAccountUi()
+                showLogin(!isAuthenticated)
 
                 if (isAuthenticated) {
                     refreshPlayback()
+                    loadQueue()
                 } else if (autoLogin && !BlitzClient.autoLoginAttempted && handle != 0L) {
                     startLogin()
                 }
@@ -275,16 +645,16 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun updateAccountUi() {
-        val connectedVisibility = if (authenticated) View.VISIBLE else View.GONE
+    private fun logout() {
+        AutoDJService.stop(this)
 
-        loginPanel.visibility = if (authenticated) View.GONE else View.VISIBLE
-        playerPanel.visibility = connectedVisibility
-        autoDjPanel.visibility = connectedVisibility
-        searchPanel.visibility = connectedVisibility
-
-        connectButton.setText(if (authenticated) R.string.logout else R.string.connect)
-        statusText.setText(if (authenticated) R.string.connected else R.string.disconnected)
+        background({ NativeBridge.logout(it); true }) {
+            authenticated = false
+            hasPlayback = false
+            currentTrackId = ""
+            currentImageUrl = ""
+            showLogin(true)
+        }
     }
 
     private fun refreshPlayback() {
@@ -297,29 +667,35 @@ class MainActivity : Activity() {
         BlitzClient.executor.execute {
             val handle = BlitzClient.currentHandle()
             val json = if (handle != 0L) NativeBridge.playbackJson(handle) else "{}"
-            val running = handle != 0L && NativeBridge.isAutoDJRunning(handle)
 
             mainHandler.post {
                 pollInFlight = false
-                renderPlayback(json, running)
+                renderPlayback(json)
             }
         }
     }
 
-    private fun renderPlayback(json: String, autoDjRunning: Boolean) {
+    private fun renderPlayback(json: String) {
         val playback = runCatching { JSONObject(json) }.getOrNull() ?: JSONObject()
 
-        updatingControls = true
-        autoDjSwitch.isChecked = autoDjRunning
-        updatingControls = false
+        hasPlayback = playback.optBoolean("active")
+        autoDjRunning = playback.optBoolean("auto_dj", autoDjRunning)
+        renderAutoDj()
 
-        if (!playback.optBoolean("active")) {
+        if (!hasPlayback) {
             playing = false
-            trackName.setText(R.string.nothing_playing)
+            durationMs = 0
+            progressMs = 0
+            currentTrackId = ""
+            trackTitle.setText(R.string.nothing_playing)
             trackArtist.setText(R.string.open_spotify_hint)
-            deviceText.text = ""
-            trackProgress.progress = 0
-            playPauseButton.setText(R.string.play)
+            trackAlbum.text = ""
+            playingFrom.setText(R.string.app_name)
+            deviceChip.setText(R.string.devices)
+            loadArt("")
+            renderPlayState()
+            renderProgress()
+            updateMiniPlayer()
             return
         }
 
@@ -327,22 +703,214 @@ class MainActivity : Activity() {
         val device = playback.optJSONObject("device") ?: JSONObject()
 
         playing = playback.optBoolean("playing")
+        shuffle = playback.optBoolean("shuffle")
+        repeatMode = playback.optString("repeat", "off")
+        durationMs = playback.optInt("duration_ms")
+        progressMs = playback.optInt("progress_ms")
+        progressUpdatedAt = SystemClock.elapsedRealtime()
 
-        trackName.text = track.optString("name").ifEmpty { getString(R.string.nothing_playing) }
-        trackArtist.text = track.optString("artist")
-        deviceText.text = device.optString("name")
-        playPauseButton.setText(if (playing) R.string.pause else R.string.play)
+        val trackId = track.optString("id")
+        val title = track.optString("name").ifEmpty { getString(R.string.nothing_playing) }
+        currentArtist = track.optString("artist")
 
-        val duration = playback.optInt("duration_ms")
-        val progress = playback.optInt("progress_ms")
-        trackProgress.progress = if (duration > 0) (progress.toLong() * 1000 / duration).toInt() else 0
+        trackTitle.text = title
+        trackTitle.isSelected = true
+        trackArtist.text = currentArtist
+        trackAlbum.text = track.optString("album")
+        miniTitle.text = title
+        miniArtist.text = currentArtist
 
-        if (!draggingVolume) {
-            volumeBar.progress = device.optInt("volume", volumeBar.progress)
+        val deviceName = device.optString("name")
+        deviceChip.text = deviceName.ifEmpty { getString(R.string.devices) }
+        deviceChip.setIconResource(deviceIcon(device.optString("type")))
+        playingFrom.text = if (deviceName.isNotEmpty()) getString(R.string.playing_on, deviceName) else getString(R.string.app_name)
+
+        if (!draggingVolume && device.has("volume")) {
+            volumeSlider.value = device.optInt("volume").coerceIn(0, 100).toFloat()
+        }
+
+        loadArt(track.optString("image_url"))
+
+        if (trackId != currentTrackId) {
+            currentTrackId = trackId
+            loadQueue()
+        }
+
+        renderPlayState()
+        renderModes()
+        renderProgress()
+        updateMiniPlayer()
+    }
+
+    private fun renderPlayState() {
+        val icon = if (playing) R.drawable.ic_pause else R.drawable.ic_play
+        playPauseButton.setImageResource(icon)
+        playPauseButton.contentDescription = getString(if (playing) R.string.pause else R.string.play)
+        miniPlayPause.setIconResource(icon)
+    }
+
+    private fun renderModes() {
+        val active = ContextCompat.getColor(this, R.color.accent)
+        val inactive = ContextCompat.getColor(this, R.color.text_secondary)
+
+        shuffleButton.iconTint = ColorStateList.valueOf(if (shuffle) active else inactive)
+        repeatButton.iconTint = ColorStateList.valueOf(if (repeatMode == "off") inactive else active)
+        repeatButton.setIconResource(if (repeatMode == "track") R.drawable.ic_repeat_one else R.drawable.ic_repeat)
+    }
+
+    private fun renderProgress() {
+        if (!hasPlayback || durationMs <= 0) {
+            if (!draggingProgress) {
+                progressSlider.value = 0f
+            }
+
+            elapsedTime.setText(R.string.zero_time)
+            totalTime.setText(R.string.zero_time)
+            miniProgress.progress = 0
+            return
+        }
+
+        val elapsed = if (playing) SystemClock.elapsedRealtime() - progressUpdatedAt else 0L
+        val position = (progressMs + elapsed).coerceIn(0L, durationMs.toLong()).toInt()
+        val fraction = position.toFloat() / durationMs
+
+        if (!draggingProgress) {
+            progressSlider.value = (fraction * PROGRESS_SCALE).coerceIn(0f, PROGRESS_SCALE)
+            elapsedTime.text = formatTime(position)
+        }
+
+        totalTime.text = formatTime(durationMs)
+        miniProgress.max = PROGRESS_SCALE.toInt()
+        miniProgress.progress = (fraction * PROGRESS_SCALE).toInt()
+
+        if (playing && position >= durationMs) {
+            refreshPlayback()
+        }
+    }
+
+    private fun renderAutoDj() {
+        updatingControls = true
+        autoDjSwitch.isChecked = autoDjRunning
+        playerAutoDjSwitch.isChecked = autoDjRunning
+        updatingControls = false
+
+        val query = BlitzClient.savedQuery(this)
+        autoDjStatus.text = if (autoDjRunning) getString(R.string.auto_dj_on, query) else getString(R.string.auto_dj_off)
+        autoDjIcon.imageTintList = ColorStateList.valueOf(
+            ContextCompat.getColor(this, if (autoDjRunning) R.color.accent else R.color.text_secondary)
+        )
+    }
+
+    private fun loadArt(url: String) {
+        if (url == currentImageUrl) {
+            return
+        }
+
+        currentImageUrl = url
+
+        if (url.isEmpty()) {
+            albumArt.setImageDrawable(null)
+            miniArt.setImageDrawable(null)
+            backgroundArt.setImageDrawable(null)
+            applyColors(ContextCompat.getColor(this, R.color.accent), ContextCompat.getColor(this, R.color.background))
+            return
+        }
+
+        albumArt.load(url) {
+            crossfade(300)
+            allowHardware(false)
+            listener(onSuccess = { _, result ->
+                (result.drawable as? BitmapDrawable)?.bitmap?.let(::extractColors)
+            })
+        }
+
+        miniArt.load(url) { crossfade(true) }
+        backgroundArt.load(url) { crossfade(600) }
+    }
+
+    private fun extractColors(bitmap: Bitmap) {
+        Palette.from(bitmap).maximumColorCount(16).generate { palette ->
+            val fallbackAccent = ContextCompat.getColor(this, R.color.accent)
+            val fallbackDark = ContextCompat.getColor(this, R.color.background)
+
+            if (palette == null) {
+                applyColors(fallbackAccent, fallbackDark)
+                return@generate
+            }
+
+            val vibrant = palette.getVibrantColor(palette.getLightVibrantColor(fallbackAccent))
+            val dark = palette.getDarkMutedColor(palette.getDarkVibrantColor(fallbackDark))
+
+            applyColors(vibrant, dark)
+        }
+    }
+
+    private fun applyColors(accent: Int, dark: Int) {
+        val background = ContextCompat.getColor(this, R.color.background)
+        val top = ColorUtils.setAlphaComponent(ColorUtils.blendARGB(dark, background, 0.2f), 0x99)
+        val middle = ColorUtils.setAlphaComponent(ColorUtils.blendARGB(dark, background, 0.6f), 0xDD)
+
+        backgroundTint.background = GradientDrawable(
+            GradientDrawable.Orientation.TOP_BOTTOM,
+            intArrayOf(top, middle, background)
+        )
+
+        val readable = if (ColorUtils.calculateLuminance(accent) < 0.25) {
+            ColorUtils.blendARGB(accent, 0xFFFFFFFF.toInt(), 0.45f)
+        } else {
+            accent
+        }
+
+        val accentList = ColorStateList.valueOf(readable)
+        progressSlider.trackActiveTintList = accentList
+        progressSlider.thumbTintList = accentList
+        miniProgress.setIndicatorColor(readable)
+    }
+
+    private fun togglePlayback() {
+        val pause = playing
+        playing = !pause
+        progressUpdatedAt = SystemClock.elapsedRealtime()
+        renderPlayState()
+        command { if (pause) NativeBridge.pause(it) else NativeBridge.play(it) }
+    }
+
+    private fun playUri(uri: String) {
+        if (uri.isNotEmpty()) {
+            command { NativeBridge.playTrack(it, uri) }
+        }
+    }
+
+    private fun queueUri(uri: String) {
+        if (uri.isEmpty()) {
+            return
+        }
+
+        command(message = getString(R.string.queued)) { NativeBridge.queueTrack(it, uri) }
+        mainHandler.postDelayed({ loadQueue() }, 800)
+    }
+
+    private fun loadQueue() {
+        if (!authenticated) {
+            return
+        }
+
+        BlitzClient.executor.execute {
+            val handle = BlitzClient.currentHandle()
+            val json = if (handle != 0L) NativeBridge.queueJson(handle, 10) else "[]"
+            val tracks = TrackItem.list(json)
+
+            mainHandler.post {
+                queueAdapter.submit(tracks)
+                queueTitle.visibility = if (tracks.isEmpty()) View.GONE else View.VISIBLE
+            }
         }
     }
 
     private fun setAutoDJ(enabled: Boolean) {
+        autoDjRunning = enabled
+        renderAutoDj()
+
         if (enabled) {
             val query = applyQuery()
             requestNotificationPermission()
@@ -364,8 +932,9 @@ class MainActivity : Activity() {
     }
 
     private fun applyQuery(): String {
-        val query = autoDjQuery.text.toString().trim().ifEmpty { "electronic music" }
+        val query = autoDjQuery.text?.toString()?.trim().orEmpty().ifEmpty { "party hits" }
         BlitzClient.saveQuery(this, query)
+        renderAutoDj()
 
         BlitzClient.executor.execute {
             val handle = BlitzClient.currentHandle()
@@ -378,144 +947,224 @@ class MainActivity : Activity() {
         return query
     }
 
+    private fun loadSuggestions() {
+        if (!authenticated) {
+            return
+        }
+
+        val query = applyQuery()
+        suggestionProgress.visibility = View.VISIBLE
+
+        BlitzClient.executor.execute {
+            val handle = BlitzClient.currentHandle()
+            val json = if (handle != 0L) NativeBridge.recommendJson(handle, query, 8) else "[]"
+            val tracks = TrackItem.list(json)
+
+            mainHandler.post {
+                suggestionProgress.visibility = View.GONE
+                suggestionAdapter.submit(tracks)
+                suggestionEmpty.visibility = if (tracks.isEmpty()) View.VISIBLE else View.GONE
+            }
+        }
+    }
+
     private fun search() {
-        val query = searchInput.text.toString().trim()
+        val query = searchInput.text?.toString()?.trim().orEmpty()
 
         if (query.isEmpty()) {
             return
         }
 
         hideKeyboard()
+        searchProgress.visibility = View.VISIBLE
 
         BlitzClient.executor.execute {
             val handle = BlitzClient.currentHandle()
             val json = if (handle != 0L) NativeBridge.searchJson(handle, query, 10) else "[]"
+            val tracks = TrackItem.list(json)
 
-            mainHandler.post { renderTracks(json) }
+            mainHandler.post {
+                searchProgress.visibility = View.GONE
+                searchAdapter.submit(tracks)
+                searchEmpty.visibility = if (tracks.isEmpty()) View.VISIBLE else View.GONE
+                searchEmpty.setText(if (tracks.isEmpty()) R.string.no_results else R.string.search_empty)
+            }
         }
     }
 
-    private fun renderTracks(json: String) {
-        resultsContainer.removeAllViews()
+    private fun onSpeakersChanged() {
+        val output = speakers.currentOutput()
+        val previous = lastOutputType
+        lastOutputType = output.type
 
-        val tracks = runCatching { JSONArray(json) }.getOrNull() ?: JSONArray()
+        if (previous == SpeakerManager.OutputType.BLUETOOTH && output.type != SpeakerManager.OutputType.BLUETOOTH) {
+            resumeOnReconnect = partyMode && playing
+        } else if (previous != null &&
+            previous != SpeakerManager.OutputType.BLUETOOTH &&
+            output.type == SpeakerManager.OutputType.BLUETOOTH &&
+            resumeOnReconnect
+        ) {
+            resumeOnReconnect = false
+            mainHandler.postDelayed({
+                command { NativeBridge.play(it) }
+                toast(getString(R.string.party_resumed))
+            }, RECONNECT_RESUME_DELAY_MS)
+        }
 
-        if (tracks.length() == 0) {
-            resultsContainer.addView(infoText(getString(R.string.no_results)))
+        renderOutput(output)
+
+        if (currentPage == R.id.nav_speakers) {
+            refreshSpeakers()
+        }
+    }
+
+    private fun renderOutput(output: SpeakerManager.Output) {
+        val (icon, name) = when (output.type) {
+            SpeakerManager.OutputType.BLUETOOTH -> R.drawable.ic_bluetooth to (output.name ?: getString(R.string.bluetooth_speakers))
+            SpeakerManager.OutputType.WIRED -> R.drawable.ic_volume to getString(R.string.wired_output)
+            SpeakerManager.OutputType.USB -> R.drawable.ic_volume to (output.name ?: getString(R.string.wired_output))
+            SpeakerManager.OutputType.PHONE -> R.drawable.ic_phone to getString(R.string.phone_speaker)
+        }
+
+        outputIcon.setImageResource(icon)
+        outputName.text = name
+    }
+
+    private fun refreshSpeakers() {
+        if (!::speakers.isInitialized) {
             return
         }
 
-        for (index in 0 until tracks.length()) {
-            val track = tracks.optJSONObject(index) ?: continue
-            val uri = track.optString("uri")
+        val output = speakers.currentOutput()
+        renderOutput(output)
 
-            resultsContainer.addView(
-                row(
-                    title = track.optString("name"),
-                    subtitle = track.optString("artist"),
-                    primary = getString(R.string.play_track) to { command { NativeBridge.playTrack(it, uri) } },
-                    secondary = getString(R.string.queue) to {
-                        command(message = getString(R.string.done)) { NativeBridge.queueTrack(it, uri) }
-                    }
-                )
-            )
+        bluetoothPermissionButton.visibility = View.GONE
+
+        when {
+            !speakers.isBluetoothAvailable -> {
+                bluetoothAdapter.submit(emptyList())
+                bluetoothEmpty.visibility = View.GONE
+                bluetoothSettingsButton.visibility = View.GONE
+                return
+            }
+
+            !speakers.hasPermission() -> {
+                bluetoothAdapter.submit(emptyList())
+                bluetoothEmpty.visibility = View.VISIBLE
+                bluetoothEmpty.setText(R.string.bluetooth_permission)
+                bluetoothPermissionButton.visibility = View.VISIBLE
+                return
+            }
+
+            !speakers.isBluetoothEnabled() -> {
+                bluetoothAdapter.submit(emptyList())
+                bluetoothEmpty.visibility = View.VISIBLE
+                bluetoothEmpty.setText(R.string.bluetooth_off)
+                return
+            }
         }
+
+        speakers.connectProfile()
+
+        val list = speakers.speakers()
+        val activeName = if (output.type == SpeakerManager.OutputType.BLUETOOTH) output.name else null
+
+        bluetoothEmpty.visibility = if (list.isEmpty()) View.VISIBLE else View.GONE
+        bluetoothEmpty.setText(R.string.bluetooth_empty)
+
+        bluetoothAdapter.submit(list.map { speaker ->
+            val active = speaker.connected && (activeName == null || activeName == speaker.name)
+
+            DeviceItem(
+                key = speaker.address,
+                name = speaker.name,
+                subtitle = getString(
+                    when {
+                        active -> R.string.playing_here
+                        speaker.connected -> R.string.connected
+                        else -> R.string.paired
+                    }
+                ),
+                icon = R.drawable.ic_bluetooth,
+                highlighted = speaker.connected,
+                actionLabel = getString(if (speaker.connected) R.string.disconnect_device else R.string.connect_device),
+                onAction = {
+                    val success = if (speaker.connected) speakers.disconnect(speaker) else speakers.connect(speaker)
+
+                    if (!success) {
+                        toast(getString(R.string.bluetooth_connect_fallback))
+                        speakers.openBluetoothSettings(this)
+                    }
+
+                    mainHandler.postDelayed({ refreshSpeakers() }, 1500)
+                }
+            )
+        })
     }
 
-    private fun showDevices() {
+    private fun loadConnectDevices() {
+        if (!authenticated) {
+            return
+        }
+
         BlitzClient.executor.execute {
             val handle = BlitzClient.currentHandle()
             val json = if (handle != 0L) NativeBridge.devicesJson(handle) else "[]"
+            val devices = runCatching { JSONArray(json) }.getOrNull() ?: JSONArray()
 
             mainHandler.post {
-                resultsContainer.removeAllViews()
-
-                val devices = runCatching { JSONArray(json) }.getOrNull() ?: JSONArray()
-
-                if (devices.length() == 0) {
-                    resultsContainer.addView(infoText(getString(R.string.no_devices)))
-                    return@post
-                }
-
-                for (index in 0 until devices.length()) {
-                    val device = devices.optJSONObject(index) ?: continue
+                val items = (0 until devices.length()).mapNotNull { index ->
+                    val device = devices.optJSONObject(index) ?: return@mapNotNull null
                     val id = device.optString("id")
-                    val active = if (device.optBoolean("active")) " ●" else ""
+                    val active = device.optBoolean("active")
+                    val type = device.optString("type")
+                    val details = buildString {
+                        append(type)
 
-                    resultsContainer.addView(
-                        row(
-                            title = device.optString("name") + active,
-                            subtitle = device.optString("type"),
-                            primary = getString(R.string.use_device) to {
-                                command { NativeBridge.transferPlayback(it, id) }
-                            },
-                            secondary = null
-                        )
+                        if (active) {
+                            append(" • ")
+                            append(getString(R.string.active_device))
+                        }
+
+                        if (device.has("volume")) {
+                            append(" • ")
+                            append(getString(R.string.volume_percent, device.optInt("volume")))
+                        }
+                    }
+
+                    DeviceItem(
+                        key = id,
+                        name = device.optString("name"),
+                        subtitle = details,
+                        icon = deviceIcon(type),
+                        highlighted = active,
+                        actionLabel = if (active || id.isEmpty()) null else getString(R.string.use_device),
+                        onAction = {
+                            command { NativeBridge.transferPlayback(it, id) }
+                            mainHandler.postDelayed({ loadConnectDevices() }, 1200)
+                        }
                     )
                 }
 
-                findViewById<View>(R.id.rootScroll).post {
-                    findViewById<android.widget.ScrollView>(R.id.rootScroll)
-                        .smoothScrollTo(0, searchPanel.top)
-                }
+                connectAdapter.submit(items)
+                connectEmpty.visibility = if (items.isEmpty()) View.VISIBLE else View.GONE
             }
         }
     }
 
-    private fun row(
-        title: String,
-        subtitle: String,
-        primary: Pair<String, () -> Unit>,
-        secondary: Pair<String, () -> Unit>?
-    ): View {
-        val padding = (8 * resources.displayMetrics.density).toInt()
-
-        val texts = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-
-            addView(TextView(context).apply {
-                text = title
-                maxLines = 1
-                ellipsize = android.text.TextUtils.TruncateAt.END
-                setTextColor(getColor(R.color.text_primary))
-                textSize = 15f
-            })
-
-            addView(TextView(context).apply {
-                text = subtitle
-                maxLines = 1
-                ellipsize = android.text.TextUtils.TruncateAt.END
-                setTextColor(getColor(R.color.text_secondary))
-                textSize = 13f
-            })
-        }
-
-        return LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setPadding(0, padding, 0, padding)
-            gravity = android.view.Gravity.CENTER_VERTICAL
-
-            addView(texts)
-
-            addView(Button(context).apply {
-                text = primary.first
-                setOnClickListener { primary.second() }
-            })
-
-            if (secondary != null) {
-                addView(Button(context).apply {
-                    text = secondary.first
-                    setOnClickListener { secondary.second() }
-                })
-            }
+    private fun applyPartyMode() {
+        if (partyMode) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            resumeOnReconnect = false
         }
     }
 
-    private fun infoText(message: String) = TextView(this).apply {
-        text = message
-        setTextColor(getColor(R.color.text_secondary))
-        setPadding(0, 16, 0, 16)
+    private fun deviceIcon(type: String): Int = when (type.lowercase()) {
+        "computer" -> R.drawable.ic_computer
+        "smartphone", "tablet" -> R.drawable.ic_phone
+        else -> R.drawable.ic_speaker
     }
 
     private fun openSpotify() {
@@ -535,11 +1184,11 @@ class MainActivity : Activity() {
     ) {
         background(action) { success ->
             if (success) {
-                message?.let { toast(it) }
+                message?.let(::toast)
             }
 
             if (refresh) {
-                mainHandler.postDelayed({ refreshPlayback() }, 600)
+                mainHandler.postDelayed({ refreshPlayback() }, 500)
             }
         }
     }
@@ -562,9 +1211,10 @@ class MainActivity : Activity() {
 
     private fun requestNotificationPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
+            android.content.pm.PackageManager.PERMISSION_GRANTED
         ) {
-            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), NOTIFICATION_REQUEST)
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
     }
 
@@ -579,9 +1229,16 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun formatTime(milliseconds: Int): String {
+        val totalSeconds = milliseconds / 1000
+        return "%d:%02d".format(totalSeconds / 60, totalSeconds % 60)
+    }
+
     companion object {
         private const val POLL_INTERVAL_MS = 3000L
-        private const val NOTIFICATION_REQUEST = 10
+        private const val TICK_INTERVAL_MS = 500L
+        private const val RECONNECT_RESUME_DELAY_MS = 1500L
+        private const val PROGRESS_SCALE = 1000f
         private const val SPOTIFY_PACKAGE = "com.spotify.music"
     }
 }

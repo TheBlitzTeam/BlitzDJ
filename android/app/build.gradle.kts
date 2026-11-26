@@ -15,8 +15,8 @@ android {
         applicationId = "com.theblitzteam.blitzdj"
         minSdk = 24
         targetSdk = 35
-        versionCode = 3
-        versionName = "0.3.0"
+        versionCode = 4
+        versionName = "0.4.0"
 
         buildConfigField("String", "SPOTIFY_CLIENT_ID", "\"$spotifyClientId\"")
 
@@ -77,4 +77,13 @@ android {
             useLegacyPackaging = false
         }
     }
+}
+
+dependencies {
+    implementation("androidx.core:core-ktx:1.13.1")
+    implementation("androidx.appcompat:appcompat:1.7.0")
+    implementation("androidx.recyclerview:recyclerview:1.3.2")
+    implementation("androidx.palette:palette-ktx:1.0.0")
+    implementation("com.google.android.material:material:1.12.0")
+    implementation("io.coil-kt:coil:2.7.0")
 }

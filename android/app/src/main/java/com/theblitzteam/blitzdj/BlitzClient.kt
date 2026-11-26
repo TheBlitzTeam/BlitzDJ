@@ -11,6 +11,7 @@ object BlitzClient {
     private const val PREFERENCES = "blitzdj"
     private const val KEY_CLIENT_ID = "client_id"
     private const val KEY_QUERY = "auto_dj_query"
+    private const val KEY_PARTY = "party_mode"
 
     val executor: ExecutorService = Executors.newSingleThreadExecutor { runnable ->
         Thread(runnable, "BlitzDJ-Worker").apply { isDaemon = true }
@@ -32,10 +33,17 @@ object BlitzClient {
     }
 
     fun savedQuery(context: Context): String =
-        preferences(context).getString(KEY_QUERY, null) ?: "electronic music"
+        preferences(context).getString(KEY_QUERY, null) ?: "party hits"
 
     fun saveQuery(context: Context, query: String) {
         preferences(context).edit().putString(KEY_QUERY, query.trim()).apply()
+    }
+
+    fun partyMode(context: Context): Boolean =
+        preferences(context).getBoolean(KEY_PARTY, false)
+
+    fun savePartyMode(context: Context, enabled: Boolean) {
+        preferences(context).edit().putBoolean(KEY_PARTY, enabled).apply()
     }
 
     @Synchronized

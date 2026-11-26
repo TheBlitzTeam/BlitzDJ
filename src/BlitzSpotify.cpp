@@ -1019,6 +1019,28 @@ namespace blitzdj
         return response.success ? response.data : Json::object();
     }
 
+    std::vector<SpotifyTrack> BlitzSpotify::getQueueTracks()
+    {
+        std::vector<SpotifyTrack> tracks;
+
+        const auto response = request("GET", "/me/player/queue");
+
+        if (!response.success)
+        {
+            return tracks;
+        }
+
+        for (const auto& item : arrayAt(response.data, "queue"))
+        {
+            if (item.is_object() && getString(item, "type") == "track")
+            {
+                tracks.push_back(parseTrack(item));
+            }
+        }
+
+        return tracks;
+    }
+
     std::optional<SpotifyPlayback> BlitzSpotify::getPlayback()
     {
         const auto response = request("GET", "/me/player");

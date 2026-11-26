@@ -21,9 +21,11 @@ object NativeBridge {
     external fun setVolume(handle: Long, volume: Int): Boolean
     external fun seek(handle: Long, positionMs: Int): Boolean
     external fun setShuffle(handle: Long, enabled: Boolean): Boolean
+    external fun setRepeat(handle: Long, mode: String): Boolean
 
     external fun playbackJson(handle: Long): String
     external fun devicesJson(handle: Long): String
+    external fun queueJson(handle: Long, limit: Int): String
     external fun searchJson(handle: Long, query: String, limit: Int): String
     external fun recommendJson(handle: Long, query: String, count: Int): String
 
