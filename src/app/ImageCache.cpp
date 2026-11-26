@@ -1,3 +1,9 @@
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#endif
+
 #include "ImageCache.hpp"
 
 #include "HttpClient.hpp"
@@ -18,19 +24,19 @@ namespace blitzdj::app
         constexpr int THUMBNAIL_SIZE = 128;
         constexpr int FULL_SIZE = 640;
 
-        std::vector<std::uint8_t> resize(const std::uint8_t* source, int width, int height, int target, int& outWidth, int& outHeight)
+        std::vector<std::uint8_t> resize(const std::uint8_t* source, int width, int height, int limit, int& outWidth, int& outHeight)
         {
             const int largest = std::max(width, height);
 
-            if (largest <= target)
+            if (largest <= limit)
             {
                 outWidth = width;
                 outHeight = height;
                 return std::vector<std::uint8_t>(source, source + static_cast<std::size_t>(width) * height * 4);
             }
 
-            outWidth = std::max(1, width * target / largest);
-            outHeight = std::max(1, height * target / largest);
+            outWidth = std::max(1, width * limit / largest);
+            outHeight = std::max(1, height * limit / largest);
 
             std::vector<std::uint8_t> output(static_cast<std::size_t>(outWidth) * outHeight * 4);
 

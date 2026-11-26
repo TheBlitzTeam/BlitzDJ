@@ -350,7 +350,7 @@ if(BLITZDJ_BUILD_GUI)
     if(WIN32)
         set_target_properties(BlitzDJApp PROPERTIES WIN32_EXECUTABLE TRUE)
         target_link_libraries(BlitzDJApp PRIVATE shell32)
-        target_compile_definitions(BlitzDJApp PRIVATE _CRT_SECURE_NO_WARNINGS)
+        target_compile_definitions(BlitzDJApp PRIVATE _CRT_SECURE_NO_WARNINGS NOMINMAX WIN32_LEAN_AND_MEAN)
 
         if(MSVC)
             target_link_options(BlitzDJApp PRIVATE "/ENTRY:mainCRTStartup")
