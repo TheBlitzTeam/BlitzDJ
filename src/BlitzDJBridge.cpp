@@ -88,6 +88,11 @@ extern "C"
         {
             BlitzDJConfig config;
             config.clientId = safe(client_id);
+
+            if (config.clientId.empty())
+            {
+                config.clientId = BLITZDJ_DEFAULT_CLIENT_ID;
+            }
             config.sessionPath = safe(session_path);
             config.autoDJ = true;
 

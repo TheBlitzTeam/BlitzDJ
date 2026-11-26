@@ -3,9 +3,9 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
-val spotifyClientId: String = providers.gradleProperty("spotifyClientId")
-    .orElse(providers.environmentVariable("SPOTIFY_CLIENT_ID"))
-    .getOrElse("")
+val spotifyClientId: String = providers.environmentVariable("SPOTIFY_CLIENT_ID").orNull
+    ?.takeIf { it.isNotBlank() }
+    ?: providers.gradleProperty("spotifyClientId").getOrElse("")
 
 android {
     namespace = "com.theblitzteam.blitzdj"

@@ -896,6 +896,9 @@ int main()
         clientId = settings.value("client_id", std::string());
 
     if (clientId.empty())
+        clientId = BLITZDJ_DEFAULT_CLIENT_ID;
+
+    if (clientId.empty())
     {
         header("INITIAL SETUP");
         clientId = input("Spotify Client ID: ");
