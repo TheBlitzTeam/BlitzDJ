@@ -113,7 +113,7 @@ jobs:
         if: steps.selection.outputs.enabled == 'true'
         shell: bash
         env:
-          ENABLE_BLUETOOTH: ${{ inputs.enable_bluetooth == false && 'OFF' || 'ON' }}
+          ENABLE_BLUETOOTH: ${{ github.event_name == 'workflow_dispatch' && !inputs.enable_bluetooth && 'OFF' || 'ON' }}
         run: |
           EXTRA_ARGS=()
 
