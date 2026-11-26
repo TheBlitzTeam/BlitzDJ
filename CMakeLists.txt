@@ -54,6 +54,7 @@ option(BLITZDJ_ENABLE_WARNINGS "Enable compiler warnings" ON)
 option(BLITZDJ_WARNINGS_AS_ERRORS "Treat warnings as errors" OFF)
 option(BLITZDJ_BUILD_TESTS "Build tests" OFF)
 option(BLITZDJ_BUILD_CLI "Build the terminal application" ${BLITZDJ_DEFAULT_CLI})
+option(BLITZDJ_BUILD_GUI "Build the desktop application" ${BLITZDJ_DEFAULT_CLI})
 option(BLITZDJ_USE_SYSTEM_JSON "Use system nlohmann_json" OFF)
 option(BLITZDJ_INSTALL_ASSETS "Install application assets" ON)
 
@@ -65,6 +66,11 @@ set_property(CACHE BLITZDJ_HTTP_BACKEND PROPERTY STRINGS curl android apple)
 if(BLITZDJ_MOBILE AND BLITZDJ_BUILD_CLI)
     message(STATUS "The terminal application is unavailable on ${BLITZDJ_PLATFORM}")
     set(BLITZDJ_BUILD_CLI OFF CACHE BOOL "Build the terminal application" FORCE)
+endif()
+
+if(BLITZDJ_MOBILE AND BLITZDJ_BUILD_GUI)
+    message(STATUS "The desktop application is unavailable on ${BLITZDJ_PLATFORM}")
+    set(BLITZDJ_BUILD_GUI OFF CACHE BOOL "Build the desktop application" FORCE)
 endif()
 
 set(BLITZDJ_ROOT "${CMAKE_CURRENT_SOURCE_DIR}")
@@ -251,6 +257,119 @@ elseif(MSVC)
     target_compile_options(BlitzDJCore PRIVATE /utf-8 /EHsc)
 endif()
 
+if(BLITZDJ_BUILD_GUI)
+    find_package(OpenGL REQUIRED)
+
+    set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+    set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
+    set(GLFW_BUILD_WAYLAND OFF CACHE BOOL "" FORCE)
+
+    FetchContent_Declare(
+        glfw
+        URL "https://github.com/glfw/glfw/releases/download/3.4/glfw-3.4.zip"
+        ${BLITZDJ_FETCH_OPTIONS}
+    )
+
+    FetchContent_Declare(
+        imgui
+        GIT_REPOSITORY "https://github.com/ocornut/imgui.git"
+        GIT_TAG "f401021d5a5d56fe2304056c391e78f81c8d4b8f"
+    )
+
+    FetchContent_MakeAvailable(glfw imgui)
+
+    set(BLITZDJ_STB_DIR "${CMAKE_BINARY_DIR}/_deps/stb")
+    set(BLITZDJ_STB_HEADER "${BLITZDJ_STB_DIR}/stb_image.h")
+
+    if(NOT EXISTS "${BLITZDJ_STB_HEADER}")
+        file(DOWNLOAD
+            "https://raw.githubusercontent.com/nothings/stb/6b5799bae8a1fe3792691ef4b72ae26434c3e799/stb_image.h"
+            "${BLITZDJ_STB_HEADER}"
+            STATUS BLITZDJ_STB_STATUS
+            TLS_VERIFY ON
+        )
+        list(GET BLITZDJ_STB_STATUS 0 BLITZDJ_STB_CODE)
+
+        if(NOT BLITZDJ_STB_CODE EQUAL 0)
+            file(REMOVE "${BLITZDJ_STB_HEADER}")
+            message(FATAL_ERROR "Could not download stb_image.h: ${BLITZDJ_STB_STATUS}")
+        endif()
+    endif()
+
+    function(blitzdj_embed_file input symbol output)
+        if(NOT EXISTS "${output}" OR "${input}" IS_NEWER_THAN "${output}")
+            file(READ "${input}" content HEX)
+            string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," content "${content}")
+            file(WRITE "${output}"
+                "#include <cstddef>\n"
+                "extern const unsigned char ${symbol}[] = {${content}};\n"
+                "extern const std::size_t ${symbol}Size = sizeof(${symbol});\n"
+            )
+        endif()
+    endfunction()
+
+    set(BLITZDJ_GENERATED_DIR "${CMAKE_BINARY_DIR}/generated")
+    blitzdj_embed_file("${imgui_SOURCE_DIR}/misc/fonts/Roboto-Medium.ttf" blitzdjFont "${BLITZDJ_GENERATED_DIR}/EmbeddedFont.cpp")
+    blitzdj_embed_file("${BLITZDJ_ICON}" blitzdjIcon "${BLITZDJ_GENERATED_DIR}/EmbeddedIcon.cpp")
+
+    add_library(BlitzDJImGui STATIC
+        "${imgui_SOURCE_DIR}/imgui.cpp"
+        "${imgui_SOURCE_DIR}/imgui_draw.cpp"
+        "${imgui_SOURCE_DIR}/imgui_tables.cpp"
+        "${imgui_SOURCE_DIR}/imgui_widgets.cpp"
+        "${imgui_SOURCE_DIR}/imgui_demo.cpp"
+        "${imgui_SOURCE_DIR}/backends/imgui_impl_glfw.cpp"
+        "${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp"
+    )
+
+    target_include_directories(BlitzDJImGui PUBLIC "${imgui_SOURCE_DIR}" "${imgui_SOURCE_DIR}/backends")
+    target_link_libraries(BlitzDJImGui PUBLIC glfw OpenGL::GL ${CMAKE_DL_LIBS})
+
+    add_executable(BlitzDJApp
+        "${BLITZDJ_SOURCE_DIR}/app/AppMain.cpp"
+        "${BLITZDJ_SOURCE_DIR}/app/App.cpp"
+        "${BLITZDJ_SOURCE_DIR}/app/App.hpp"
+        "${BLITZDJ_SOURCE_DIR}/app/ImageCache.cpp"
+        "${BLITZDJ_SOURCE_DIR}/app/ImageCache.hpp"
+        "${BLITZDJ_SOURCE_DIR}/app/Icons.cpp"
+        "${BLITZDJ_SOURCE_DIR}/app/Icons.hpp"
+        "${BLITZDJ_SOURCE_DIR}/app/Platform.cpp"
+        "${BLITZDJ_SOURCE_DIR}/app/Platform.hpp"
+        "${BLITZDJ_SOURCE_DIR}/app/Strings.cpp"
+        "${BLITZDJ_SOURCE_DIR}/app/Strings.hpp"
+        "${BLITZDJ_SOURCE_DIR}/app/TaskQueue.hpp"
+        "${BLITZDJ_GENERATED_DIR}/EmbeddedFont.cpp"
+        "${BLITZDJ_GENERATED_DIR}/EmbeddedIcon.cpp"
+    )
+
+    target_include_directories(BlitzDJApp PRIVATE "${BLITZDJ_SOURCE_DIR}/app" "${BLITZDJ_STB_DIR}")
+    target_link_libraries(BlitzDJApp PRIVATE BlitzDJ::Core BlitzDJImGui)
+
+    if(WIN32)
+        set_target_properties(BlitzDJApp PROPERTIES WIN32_EXECUTABLE TRUE)
+        target_link_libraries(BlitzDJApp PRIVATE shell32)
+        target_compile_definitions(BlitzDJApp PRIVATE _CRT_SECURE_NO_WARNINGS)
+
+        if(MSVC)
+            target_link_options(BlitzDJApp PRIVATE "/ENTRY:mainCRTStartup")
+        else()
+            target_link_options(BlitzDJApp PRIVATE "-mwindows")
+        endif()
+    endif()
+
+    if(APPLE)
+        target_compile_definitions(BlitzDJImGui PUBLIC GL_SILENCE_DEPRECATION)
+    endif()
+
+    if(BLITZDJ_ENABLE_WARNINGS)
+        target_compile_options(BlitzDJApp PRIVATE ${BLITZDJ_WARNING_FLAGS})
+    endif()
+
+    install(TARGETS BlitzDJApp RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
+endif()
+
 if(BLITZDJ_ENABLE_LTO)
     check_ipo_supported(RESULT BLITZDJ_IPO_SUPPORTED OUTPUT BLITZDJ_IPO_MESSAGE LANGUAGES CXX)
 
@@ -259,6 +378,10 @@ if(BLITZDJ_ENABLE_LTO)
 
         if(TARGET BlitzDJ)
             set_property(TARGET BlitzDJ PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
+        endif()
+
+        if(TARGET BlitzDJApp)
+            set_property(TARGET BlitzDJApp PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
         endif()
     else()
         message(STATUS "LTO unavailable: ${BLITZDJ_IPO_MESSAGE}")
@@ -310,4 +433,4 @@ endif()
 
 include(CPack)
 
-message(STATUS "BlitzDJ ${PROJECT_VERSION} | ${BLITZDJ_PLATFORM} | HTTP: ${BLITZDJ_HTTP_BACKEND} | Bluetooth: ${BLITZDJ_HAS_BLUETOOTH} | CLI: ${BLITZDJ_BUILD_CLI}")
+message(STATUS "BlitzDJ ${PROJECT_VERSION} | ${BLITZDJ_PLATFORM} | HTTP: ${BLITZDJ_HTTP_BACKEND} | Bluetooth: ${BLITZDJ_HAS_BLUETOOTH} | CLI: ${BLITZDJ_BUILD_CLI} | App: ${BLITZDJ_BUILD_GUI}")
