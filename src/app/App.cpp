@@ -426,6 +426,7 @@ namespace blitzdj::app
         }
 
         dj_ = std::make_unique<BlitzDJ>(config);
+        configuredRedirect_ = config.redirectUri;
 
         if (!dj_->initialize())
         {
@@ -552,18 +553,21 @@ namespace blitzdj::app
         }
 
         loggingIn_ = true;
+        manualLogin_ = false;
         loginError_.clear();
         loginCancel_ = std::make_shared<std::atomic<bool>>(false);
 
         auto cancel = loginCancel_;
+        const std::string configured = configuredRedirect_;
 
-        network_.post([this, cancel]
+        network_.post([this, cancel, configured]
         {
-            const auto url = dj_->getAuthorizationUrl();
-            const auto redirectUri = dj_->getConfig().redirectUri;
-
             bool success = false;
+            bool manual = false;
             std::string error;
+            std::string manualUrl;
+
+            const auto url = dj_->getAuthorizationUrl();
 
             if (url.empty())
             {
@@ -571,11 +575,14 @@ namespace blitzdj::app
             }
             else
             {
-                OAuthCallbackServer server(redirectUri);
+                OAuthCallbackServer server(configured);
 
                 if (!server.start())
                 {
+                    manual = true;
+                    manualUrl = url;
                     error = server.getLastError();
+                    openUrl(url);
                 }
                 else
                 {
@@ -596,6 +603,48 @@ namespace blitzdj::app
                 }
             }
 
+            main_.post([this, success, manual, manualUrl, error]
+            {
+                loggingIn_ = false;
+                authenticated_ = success || dj_->isAuthenticated();
+
+                if (manual && !authenticated_)
+                {
+                    manualLogin_ = true;
+                    manualLoginUrl_ = manualUrl;
+                    pasteBuffer_[0] = '\0';
+                    loginError_.clear();
+                    return;
+                }
+
+                loginError_ = error;
+
+                if (authenticated_)
+                {
+                    saveSettings();
+                    refreshPlayback();
+                }
+            });
+        });
+    }
+
+    void App::finishManualLogin()
+    {
+        const std::string pasted = pasteBuffer_;
+
+        if (pasted.empty() || loggingIn_)
+        {
+            return;
+        }
+
+        loggingIn_ = true;
+        loginError_.clear();
+
+        network_.post([this, pasted]
+        {
+            const bool success = dj_->handleRedirect(pasted);
+            const std::string error = success ? std::string() : dj_->getLastError();
+
             main_.post([this, success, error]
             {
                 loggingIn_ = false;
@@ -604,6 +653,7 @@ namespace blitzdj::app
 
                 if (authenticated_)
                 {
+                    manualLogin_ = false;
                     saveSettings();
                     refreshPlayback();
                 }
@@ -1300,6 +1350,47 @@ namespace blitzdj::app
                 cancelLogin();
             }
         }
+        else if (manualLogin_)
+        {
+            ImGui::SetCursorPosX(x);
+            ImGui::PushFont(fonts_.title);
+            ImGui::TextColored(ACCENT, "%s", tr(Text::ManualLoginTitle));
+            ImGui::PopFont();
+            ImGui::SetCursorPosX(x);
+            ImGui::PushFont(fonts_.small);
+            wrappedText(tr(Text::ManualLoginInstructions), TEXT_SECONDARY, width);
+            ImGui::PopFont();
+
+            ImGui::Dummy(ImVec2(0, unit * 0.6f));
+            ImGui::SetCursorPosX(x);
+            ImGui::SetNextItemWidth(width);
+
+            if (ImGui::IsWindowAppearing())
+            {
+                ImGui::SetKeyboardFocusHere();
+            }
+
+            if (ImGui::InputTextWithHint("##paste", tr(Text::PasteUrlHint), pasteBuffer_, sizeof(pasteBuffer_), ImGuiInputTextFlags_EnterReturnsTrue))
+            {
+                finishManualLogin();
+            }
+
+            ImGui::Dummy(ImVec2(0, unit * 0.4f));
+            ImGui::SetCursorPosX(x);
+
+            if (pillButton(tr(Text::FinishLogin), true, width, unit * 3.0f))
+            {
+                finishManualLogin();
+            }
+
+            ImGui::Dummy(ImVec2(0, unit * 0.3f));
+            ImGui::SetCursorPosX(x);
+
+            if (pillButton(tr(Text::OpenBrowserAgain), false, width, unit * 2.8f))
+            {
+                openUrl(manualLoginUrl_);
+            }
+        }
         else if (pillButton(tr(Text::ConnectSpotify), true, width, unit * 3.2f))
         {
             startLogin();
@@ -1314,7 +1405,7 @@ namespace blitzdj::app
 
         ImGui::Dummy(ImVec2(0, unit * 1.2f));
         ImGui::PushFont(fonts_.small);
-        const std::string redirect = "Redirect URI: " + dj_->getConfig().redirectUri;
+        const std::string redirect = "Redirect URI: " + configuredRedirect_;
         const float redirectWidth = ImGui::CalcTextSize(redirect.c_str()).x;
         ImGui::SetCursorPosX(x + std::max(0.0f, (width - redirectWidth) * 0.5f));
         ImGui::TextColored(TEXT_SECONDARY, "%s", redirect.c_str());

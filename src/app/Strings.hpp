@@ -66,6 +66,11 @@ namespace blitzdj::app
         ProximityConnect,
         ProximityConnectDescription,
         ConnectingTo,
+        ManualLoginTitle,
+        ManualLoginInstructions,
+        PasteUrlHint,
+        FinishLogin,
+        OpenBrowserAgain,
         Count
     };
 

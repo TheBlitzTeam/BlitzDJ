@@ -73,6 +73,10 @@ namespace blitzdj::app
         bool authenticated_ = false;
         bool loggingIn_ = false;
         std::string loginError_;
+        std::string configuredRedirect_;
+        std::string manualLoginUrl_;
+        bool manualLogin_ = false;
+        char pasteBuffer_[2048] = {};
         std::shared_ptr<std::atomic<bool>> loginCancel_;
 
         bool hasPlayback_ = false;
@@ -136,6 +140,7 @@ namespace blitzdj::app
 
         void startLogin();
         void cancelLogin();
+        void finishManualLogin();
         void logout();
 
         void refreshPlayback();

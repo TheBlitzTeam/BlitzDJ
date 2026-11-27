@@ -81,7 +81,12 @@ namespace blitzdj::app
             "Pair",
             "Connect when nearby",
             "When you get close to a speaker you already paired, BlitzDJ connects to it automatically, picking the closest one.",
-            "Connecting to %s..."
+            "Connecting to %s...",
+            "Automatic login unavailable",
+            "Port 8888 is busy or reserved by the system. After authorizing in the browser, copy the full address from the address bar (it starts with http://127.0.0.1:8888/callback) and paste it below. It is fine if the page shows an error.",
+            "Paste the browser address here",
+            "Finish login",
+            "Open browser again"
         };
 
         constexpr const char* portugueseTexts[] = {
@@ -146,7 +151,12 @@ namespace blitzdj::app
             "Parear",
             "Conectar ao chegar perto",
             "Quando você chegar perto de uma caixa já pareada, o BlitzDJ conecta sozinho, escolhendo a mais próxima.",
-            "Conectando à %s..."
+            "Conectando à %s...",
+            "Login automático indisponível",
+            "A porta 8888 está ocupada por outro programa ou reservada pelo sistema. Depois de autorizar no navegador, copie o endereço completo da barra de endereços (começa com http://127.0.0.1:8888/callback) e cole abaixo. Tudo bem se a página mostrar erro.",
+            "Cole aqui o endereço do navegador",
+            "Concluir login",
+            "Abrir o navegador de novo"
         };
 
         static_assert(sizeof(english) / sizeof(english[0]) == static_cast<int>(Text::Count));

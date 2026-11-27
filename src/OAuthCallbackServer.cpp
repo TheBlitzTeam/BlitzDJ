@@ -1,6 +1,7 @@
 #include "OAuthCallbackServer.hpp"
 
 #include <algorithm>
+#include <cerrno>
 #include <cstring>
 
 #ifdef _WIN32
@@ -214,8 +215,17 @@ namespace blitzdj
         if (bind(listener, reinterpret_cast<sockaddr*>(&address), sizeof(address)) != 0 ||
             listen(listener, 4) != 0)
         {
+#ifdef _WIN32
+            const int code = WSAGetLastError();
+            const bool reserved = code == WSAEACCES;
+#else
+            const int code = errno;
+            const bool reserved = code == EACCES;
+#endif
             closeSocket(listener);
-            lastError_ = "Port " + std::to_string(port_) + " is already in use.";
+            lastError_ = reserved
+                ? "Port " + std::to_string(port_) + " is reserved by the system."
+                : "Port " + std::to_string(port_) + " is already in use by another program.";
             return false;
         }
 
