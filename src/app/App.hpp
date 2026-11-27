@@ -95,11 +95,21 @@ namespace blitzdj::app
         std::vector<SpotifyTrack> results_;
         std::vector<SpotifyDevice> devices_;
         std::vector<BluetoothDevice> speakers_;
+        std::vector<BluetoothDevice> nearby_;
 
         bool loadingSuggestions_ = false;
         bool searching_ = false;
         bool searched_ = false;
         bool loadingSpeakers_ = false;
+        bool scanning_ = false;
+        bool scanned_ = false;
+        bool loadingNearby_ = false;
+        bool proximityConnect_ = false;
+        bool proximityBusy_ = false;
+        Clock::time_point scanUntil_ = Clock::time_point{};
+        Clock::time_point lastNearbyRefresh_ = Clock::time_point{};
+        Clock::time_point lastProximityCheck_ = Clock::time_point{};
+        std::shared_ptr<std::atomic<bool>> stopping_ = std::make_shared<std::atomic<bool>>(false);
 
         char searchBuffer_[256] = {};
         char queryBuffer_[128] = {};
@@ -135,6 +145,11 @@ namespace blitzdj::app
         void loadDevices();
         void loadSpeakers();
         void checkSpeakers();
+        void startScan();
+        void updateScan();
+        void loadNearby();
+        void checkProximity();
+        void setProximityConnect(bool enabled);
 
         void setAutoDJ(bool enabled);
         void setPartyMode(bool enabled);

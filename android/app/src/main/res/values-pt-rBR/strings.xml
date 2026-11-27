@@ -72,6 +72,26 @@
     <string name="notification_title">AutoDJ do BlitzDJ ativo</string>
     <string name="notification_text">Enfileirando músicas de: %1$s</string>
     <string name="stop">Parar</string>
+    <string name="nearby_speakers">Caixas por perto</string>
+    <string name="scan">Procurar</string>
+    <string name="scanning">Procurando…</string>
+    <string name="nearby_empty">Toque em Procurar para achar caixas ao seu redor, ordenadas pela distância.</string>
+    <string name="nearby_none_found">Nenhuma caixa encontrada por perto. Ligue a caixa e coloque no modo de pareamento.</string>
+    <string name="scan_permission">Permita o acesso a dispositivos próximos para achar as caixas.</string>
+    <string name="proximity_very_close">Muito perto</string>
+    <string name="proximity_near">Perto</string>
+    <string name="proximity_in_range">No alcance</string>
+    <string name="proximity_far">Longe</string>
+    <string name="pair_and_connect">Parear</string>
+    <string name="proximity_connect">Conectar ao chegar perto</string>
+    <string name="proximity_connect_description">Quando você chegar perto de uma caixa já pareada, o BlitzDJ conecta sozinho, escolhendo a mais próxima.</string>
+    <string name="nfc_title">Encostar para conectar</string>
+    <string name="nfc_description">Encoste a parte de trás do celular na marca NFC da caixa para parear e conectar na hora.</string>
+    <string name="nfc_disabled">O NFC está desligado. Ligue para conectar encostando.</string>
+    <string name="nfc_settings">Ligar</string>
+    <string name="connecting_to">Conectando à %1$s…</string>
+    <string name="connected_to">Conectado à %1$s.</string>
+    <string name="nfc_unknown_tag">Esta etiqueta NFC não é de uma caixa Bluetooth.</string>
     <string-array name="moods">
         <item>Festa</item>
         <item>Funk</item>

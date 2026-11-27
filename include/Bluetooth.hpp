@@ -185,6 +185,8 @@ namespace blitzdj
 
         int getSignalStrength(const std::string& deviceId);
 
+        std::vector<BluetoothDevice> getNearbyAudioDevices();
+
         int getBatteryLevel(const std::string& deviceId);
 
         void setDeviceDiscoveredCallback(

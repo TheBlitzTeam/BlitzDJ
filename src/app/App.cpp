@@ -10,6 +10,7 @@
 #include <cmath>
 #include <cstdio>
 #include <fstream>
+#include <thread>
 
 namespace blitzdj::app
 {
@@ -28,6 +29,10 @@ namespace blitzdj::app
         constexpr auto POLL_INTERVAL = std::chrono::seconds(3);
         constexpr auto SPEAKER_INTERVAL = std::chrono::seconds(5);
         constexpr auto RECONNECT_INTERVAL = std::chrono::seconds(10);
+        constexpr auto SCAN_DURATION = std::chrono::seconds(12);
+        constexpr auto NEARBY_REFRESH = std::chrono::milliseconds(1500);
+        constexpr auto PROXIMITY_INTERVAL = std::chrono::seconds(30);
+        constexpr int PROXIMITY_RSSI = -70;
 
         const char* const MOODS_EN[] = {"Party", "Funk", "Pop", "Electronic", "Hip-hop", "Sertanejo", "Rock", "Lo-fi"};
         const char* const MOODS_PT[] = {"Festa", "Funk", "Pop", "Eletrônica", "Hip-hop", "Sertanejo", "Rock", "Lo-fi"};
@@ -316,6 +321,46 @@ namespace blitzdj::app
             return Icon::Speaker;
         }
 
+        Text proximityText(int rssi)
+        {
+            if (rssi >= -55)
+            {
+                return Text::ProximityVeryClose;
+            }
+
+            if (rssi >= -70)
+            {
+                return Text::ProximityNear;
+            }
+
+            if (rssi >= -85)
+            {
+                return Text::ProximityInRange;
+            }
+
+            return Text::ProximityFar;
+        }
+
+        int signalBars(int rssi)
+        {
+            if (rssi >= -55)
+            {
+                return 4;
+            }
+
+            if (rssi >= -70)
+            {
+                return 3;
+            }
+
+            if (rssi >= -85)
+            {
+                return 2;
+            }
+
+            return 1;
+        }
+
         bool isPortuguese()
         {
             return std::string(tr(Text::Search)) == "Buscar";
@@ -326,6 +371,8 @@ namespace blitzdj::app
 
     App::~App()
     {
+        stopping_->store(true);
+
         if (loginCancel_)
         {
             loginCancel_->store(true);
@@ -395,6 +442,7 @@ namespace blitzdj::app
 
         std::snprintf(queryBuffer_, sizeof(queryBuffer_), "%s", config.searchQuery.c_str());
         partyMode_ = settings_.value("party_mode", false);
+        proximityConnect_ = settings_.value("proximity_connect", false);
 
         BluetoothConfig bluetoothConfig;
         bluetoothConfig.audioDevicesOnly = true;
@@ -446,6 +494,7 @@ namespace blitzdj::app
         }
 
         settings_["party_mode"] = partyMode_;
+        settings_["proximity_connect"] = proximityConnect_;
 
         std::error_code error;
         std::filesystem::create_directories(settingsPath_.parent_path(), error);
@@ -822,6 +871,154 @@ namespace blitzdj::app
         });
     }
 
+    void App::startScan()
+    {
+        if (!bluetoothReady_ || scanning_)
+        {
+            return;
+        }
+
+        scanning_ = true;
+        scanned_ = true;
+        nearby_.clear();
+        scanUntil_ = Clock::now() + SCAN_DURATION;
+        lastNearbyRefresh_ = Clock::now();
+
+        const auto bluetooth = bluetooth_.get();
+        bluetoothQueue_.post([bluetooth] { bluetooth->startScan(); });
+    }
+
+    void App::updateScan()
+    {
+        if (!scanning_)
+        {
+            return;
+        }
+
+        const auto now = Clock::now();
+
+        if (now >= scanUntil_)
+        {
+            scanning_ = false;
+
+            const auto bluetooth = bluetooth_.get();
+            bluetoothQueue_.post([bluetooth] { bluetooth->stopScan(); });
+            loadNearby();
+            loadSpeakers();
+            return;
+        }
+
+        if (now - lastNearbyRefresh_ >= NEARBY_REFRESH)
+        {
+            lastNearbyRefresh_ = now;
+            loadNearby();
+        }
+    }
+
+    void App::loadNearby()
+    {
+        if (!bluetoothReady_ || loadingNearby_)
+        {
+            return;
+        }
+
+        loadingNearby_ = true;
+
+        bluetoothQueue_.post([this]
+        {
+            auto devices = bluetooth_->getNearbyAudioDevices();
+
+            main_.post([this, devices = std::move(devices)]() mutable
+            {
+                loadingNearby_ = false;
+                nearby_ = std::move(devices);
+            });
+        });
+    }
+
+    void App::checkProximity()
+    {
+        if (!bluetoothReady_ || !proximityConnect_ || proximityBusy_ || scanning_)
+        {
+            return;
+        }
+
+        const auto now = Clock::now();
+
+        if (now - lastProximityCheck_ < PROXIMITY_INTERVAL)
+        {
+            return;
+        }
+
+        lastProximityCheck_ = now;
+        proximityBusy_ = true;
+
+        const auto stopping = stopping_;
+
+        bluetoothQueue_.post([this, stopping]
+        {
+            std::string connectedName;
+            bool attempted = false;
+            bool success = false;
+
+            const auto connected = bluetooth_->getConnectedDevices();
+            const bool hasSpeaker = std::any_of(connected.begin(), connected.end(), [](const BluetoothDevice& device)
+            {
+                return device.audioCapable;
+            });
+
+            if (!hasSpeaker && bluetooth_->startScan())
+            {
+                for (int i = 0; i < 16 && !stopping->load(); ++i)
+                {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+                }
+
+                auto devices = bluetooth_->getNearbyAudioDevices();
+                bluetooth_->stopScan();
+
+                for (const auto& device : devices)
+                {
+                    if (stopping->load())
+                    {
+                        break;
+                    }
+
+                    if (device.paired && device.signalStrength != 0 && device.signalStrength >= PROXIMITY_RSSI)
+                    {
+                        attempted = true;
+                        connectedName = device.name.empty() ? device.address : device.name;
+                        success = bluetooth_->connectAudioDevice(device.id);
+                        break;
+                    }
+                }
+            }
+
+            if (stopping->load())
+            {
+                return;
+            }
+
+            main_.post([this, attempted, success, connectedName]
+            {
+                proximityBusy_ = false;
+
+                if (attempted)
+                {
+                    showToast(success ? format(tr(Text::ConnectingTo), connectedName) : bluetooth_->getLastErrorMessage());
+                    loadSpeakers();
+                }
+            });
+        });
+    }
+
+    void App::setProximityConnect(bool enabled)
+    {
+        proximityConnect_ = enabled;
+        lastProximityCheck_ = Clock::now() - PROXIMITY_INTERVAL + std::chrono::seconds(2);
+        saveSettings();
+    }
+
     void App::setAutoDJ(bool enabled)
     {
         autoDJ_ = enabled;
@@ -903,6 +1100,9 @@ namespace blitzdj::app
 
             checkSpeakers();
         }
+
+        updateScan();
+        checkProximity();
 
         const auto art = hasPlayback_ ? images_.get(playback_.track.imageUrl, false) : Image{};
         targetArtColor_ = art.ready ? art.color : ImVec4(0.1f, 0.1f, 0.12f, 1.0f);
@@ -1141,7 +1341,7 @@ namespace blitzdj::app
         text(hasPlayback_ && !device.empty() ? format(tr(Text::PlayingOn), device) : "BlitzDJ", TEXT_PRIMARY, width - chipWidth - unit);
         ImGui::EndGroup();
 
-        ImGui::SameLine(width - chipWidth);
+        ImGui::SameLine(ImGui::GetCursorStartPos().x + width - chipWidth);
         {
             const ImVec2 position = ImGui::GetCursorScreenPos();
             const float height = unit * 2.2f;
@@ -1209,7 +1409,7 @@ namespace blitzdj::app
 
         if (hasPlayback_)
         {
-            ImGui::SameLine(width - heartSize);
+            ImGui::SameLine(ImGui::GetCursorStartPos().x + width - heartSize);
 
             if (iconButton("favorite", Icon::Heart, heartSize, TEXT_SECONDARY, 0.5f))
             {
@@ -1242,7 +1442,7 @@ namespace blitzdj::app
         const int shown = seeking_ ? static_cast<int>(seekFraction_ * static_cast<float>(duration)) : progress;
         ImGui::TextColored(TEXT_SECONDARY, "%s", formatTime(shown).c_str());
         const std::string total = formatTime(duration);
-        ImGui::SameLine(width - ImGui::CalcTextSize(total.c_str()).x);
+        ImGui::SameLine(ImGui::GetCursorStartPos().x + width - ImGui::CalcTextSize(total.c_str()).x);
         ImGui::TextColored(TEXT_SECONDARY, "%s", total.c_str());
         ImGui::PopFont();
 
@@ -1458,7 +1658,7 @@ namespace blitzdj::app
         ImGui::PushFont(fonts_.title);
         ImGui::TextColored(TEXT_PRIMARY, "%s", tr(Text::Suggestions));
         ImGui::PopFont();
-        ImGui::SameLine(width - unit * 2.4f);
+        ImGui::SameLine(ImGui::GetCursorStartPos().x + width - unit * 2.4f);
         ImGui::SetCursorPosY(ImGui::GetCursorPosY() - unit * 0.4f);
 
         if (iconButton("refresh_suggestions", Icon::Refresh, unit * 2.4f, TEXT_SECONDARY, 0.55f))
@@ -1645,7 +1845,7 @@ namespace blitzdj::app
 
         if (bluetoothReady_)
         {
-            ImGui::SameLine(width - unit * 2.4f);
+            ImGui::SameLine(ImGui::GetCursorStartPos().x + width - unit * 2.4f);
             ImGui::SetCursorPosY(ImGui::GetCursorPosY() - unit * 0.4f);
 
             if (iconButton("refresh_speakers", Icon::Refresh, unit * 2.4f, TEXT_SECONDARY, 0.55f))
@@ -1692,6 +1892,129 @@ namespace blitzdj::app
                     });
                 }
             }
+
+            ImGui::Dummy(ImVec2(0, unit * 0.8f));
+            ImGui::PushFont(fonts_.title);
+            ImGui::TextColored(TEXT_PRIMARY, "%s", tr(Text::NearbySpeakers));
+            ImGui::PopFont();
+
+            {
+                const char* label = scanning_ ? tr(Text::Scanning) : tr(Text::Scan);
+                const float buttonWidth = ImGui::CalcTextSize(label).x + ImGui::GetStyle().FramePadding.x * 2.0f;
+                ImGui::SameLine(ImGui::GetCursorStartPos().x + width - buttonWidth);
+                ImGui::SetCursorPosY(ImGui::GetCursorPosY() - unit * 0.3f);
+
+                if (pillButton(label, !scanning_))
+                {
+                    if (scanning_)
+                    {
+                        scanUntil_ = Clock::now();
+                    }
+                    else
+                    {
+                        startScan();
+                    }
+                }
+            }
+
+            if (scanning_)
+            {
+                const ImVec2 position = ImGui::GetCursorScreenPos();
+                const float phase = std::fmod(static_cast<float>(ImGui::GetTime()) * 0.8f, 1.3f);
+                auto* list = ImGui::GetWindowDrawList();
+                const float barHeight = unit * 0.2f;
+                list->AddRectFilled(position, ImVec2(position.x + width, position.y + barHeight), color(TEXT_PRIMARY, 0.1f), barHeight);
+                const float start = position.x + width * std::clamp(phase - 0.3f, 0.0f, 1.0f);
+                const float end = position.x + width * std::clamp(phase, 0.0f, 1.0f);
+                list->AddRectFilled(ImVec2(start, position.y), ImVec2(end, position.y + barHeight), color(ACCENT), barHeight);
+                ImGui::Dummy(ImVec2(width, barHeight + unit * 0.3f));
+            }
+
+            if (nearby_.empty())
+            {
+                wrappedText(scanned_ && !scanning_ ? tr(Text::NearbyNoneFound) : tr(Text::NearbyEmpty), TEXT_SECONDARY, width);
+            }
+
+            for (const auto& device : nearby_)
+            {
+                const std::string id = device.id;
+                const std::string name = device.name.empty() ? device.address : device.name;
+                std::string subtitle;
+
+                if (device.connected)
+                {
+                    subtitle = tr(Text::Connected);
+                }
+                else
+                {
+                    subtitle = std::string(tr(proximityText(device.signalStrength))) + "  •  " + std::to_string(device.signalStrength) + " dBm  •  ";
+                    subtitle += device.paired ? tr(Text::Paired) : tr(Text::Pair);
+                }
+
+                const ImVec2 rowStart = ImGui::GetCursorScreenPos();
+                const bool veryClose = device.connected || device.signalStrength >= -55;
+
+                if (deviceRow(("nearby_" + id).c_str(), Icon::Bluetooth, name, subtitle, veryClose,
+                        device.connected ? nullptr : (device.paired ? tr(Text::Connect) : tr(Text::Pair))))
+                {
+                    showToast(format(tr(Text::ConnectingTo), name));
+                    scanUntil_ = Clock::now();
+
+                    const auto bluetooth = bluetooth_.get();
+
+                    bluetoothQueue_.post([this, bluetooth, id]
+                    {
+                        const bool ok = bluetooth->connectAudioDevice(id);
+                        const std::string error = ok ? std::string() : bluetooth->getLastErrorMessage();
+
+                        main_.post([this, error]
+                        {
+                            showToast(error);
+                            loadSpeakers();
+                            loadNearby();
+                        });
+                    });
+                }
+
+                if (!device.connected)
+                {
+                    const int bars = signalBars(device.signalStrength);
+                    auto* list = ImGui::GetWindowDrawList();
+                    const float barWidth = unit * 0.2f;
+                    const float baseX = rowStart.x + iconSize - barWidth * 4.0f;
+                    const float baseY = rowStart.y + rowHeight - unit * 0.35f;
+
+                    for (int bar = 0; bar < 4; ++bar)
+                    {
+                        const float barHeight = unit * 0.22f * static_cast<float>(bar + 1);
+                        const float x = baseX + static_cast<float>(bar) * barWidth * 1.3f;
+                        const bool lit = bar < bars;
+                        list->AddRectFilled(ImVec2(x, baseY - barHeight), ImVec2(x + barWidth, baseY), color(lit ? ACCENT : TEXT_SECONDARY, lit ? 1.0f : 0.35f), barWidth * 0.3f);
+                    }
+                }
+            }
+
+            ImGui::Dummy(ImVec2(0, unit * 0.6f));
+
+            if (beginCard("proximity", width))
+            {
+                const float lineEnd = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x;
+                ImGui::PushFont(fonts_.title);
+                ImGui::TextColored(TEXT_PRIMARY, "%s", tr(Text::ProximityConnect));
+                ImGui::PopFont();
+                ImGui::SameLine(lineEnd - ImGui::GetFrameHeight() * 1.8f);
+
+                if (toggle("proximity_toggle", proximityConnect_))
+                {
+                    setProximityConnect(!proximityConnect_);
+                }
+
+                ImGui::PushFont(fonts_.small);
+                wrappedText(tr(Text::ProximityConnectDescription), TEXT_SECONDARY, ImGui::GetContentRegionAvail().x);
+                ImGui::PopFont();
+            }
+
+            endCard();
         }
         else
         {
@@ -1708,7 +2031,7 @@ namespace blitzdj::app
         ImGui::PushFont(fonts_.title);
         ImGui::TextColored(TEXT_PRIMARY, "%s", tr(Text::SpotifyConnect));
         ImGui::PopFont();
-        ImGui::SameLine(width - unit * 2.4f);
+        ImGui::SameLine(ImGui::GetCursorStartPos().x + width - unit * 2.4f);
         ImGui::SetCursorPosY(ImGui::GetCursorPosY() - unit * 0.4f);
 
         if (iconButton("refresh_devices", Icon::Refresh, unit * 2.4f, TEXT_SECONDARY, 0.55f))

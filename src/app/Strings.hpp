@@ -54,6 +54,18 @@ namespace blitzdj::app
         Volume,
         Scan,
         SpeakerReconnected,
+        NearbySpeakers,
+        Scanning,
+        NearbyEmpty,
+        NearbyNoneFound,
+        ProximityVeryClose,
+        ProximityNear,
+        ProximityInRange,
+        ProximityFar,
+        Pair,
+        ProximityConnect,
+        ProximityConnectDescription,
+        ConnectingTo,
         Count
     };
 

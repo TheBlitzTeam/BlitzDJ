@@ -76,6 +76,26 @@
     <string name="notification_title">BlitzDJ AutoDJ is running</string>
     <string name="notification_text">Queueing music for: %1$s</string>
     <string name="stop">Stop</string>
+    <string name="nearby_speakers">Nearby speakers</string>
+    <string name="scan">Scan</string>
+    <string name="scanning">Scanning…</string>
+    <string name="nearby_empty">Tap Scan to find speakers around you, sorted by distance.</string>
+    <string name="nearby_none_found">No speakers found nearby. Turn the speaker on and put it in pairing mode.</string>
+    <string name="scan_permission">Allow nearby devices access to find speakers.</string>
+    <string name="proximity_very_close">Very close</string>
+    <string name="proximity_near">Near</string>
+    <string name="proximity_in_range">In range</string>
+    <string name="proximity_far">Far</string>
+    <string name="pair_and_connect">Pair</string>
+    <string name="proximity_connect">Connect when nearby</string>
+    <string name="proximity_connect_description">When you get close to a speaker you already paired, BlitzDJ connects to it automatically, picking the closest one.</string>
+    <string name="nfc_title">Tap to connect</string>
+    <string name="nfc_description">Touch the back of your phone to the NFC mark on the speaker to pair and connect instantly.</string>
+    <string name="nfc_disabled">NFC is off. Turn it on to tap and connect.</string>
+    <string name="nfc_settings">Turn on</string>
+    <string name="connecting_to">Connecting to %1$s…</string>
+    <string name="connected_to">Connected to %1$s.</string>
+    <string name="nfc_unknown_tag">This NFC tag is not a Bluetooth speaker.</string>
     <string-array name="moods">
         <item>Party</item>
         <item>Funk</item>

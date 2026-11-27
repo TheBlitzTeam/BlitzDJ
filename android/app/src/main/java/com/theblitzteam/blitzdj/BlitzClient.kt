@@ -12,6 +12,7 @@ object BlitzClient {
     private const val KEY_CLIENT_ID = "client_id"
     private const val KEY_QUERY = "auto_dj_query"
     private const val KEY_PARTY = "party_mode"
+    private const val KEY_PROXIMITY = "proximity_connect"
 
     val executor: ExecutorService = Executors.newSingleThreadExecutor { runnable ->
         Thread(runnable, "BlitzDJ-Worker").apply { isDaemon = true }
@@ -44,6 +45,13 @@ object BlitzClient {
 
     fun savePartyMode(context: Context, enabled: Boolean) {
         preferences(context).edit().putBoolean(KEY_PARTY, enabled).apply()
+    }
+
+    fun proximityConnect(context: Context): Boolean =
+        preferences(context).getBoolean(KEY_PROXIMITY, false)
+
+    fun saveProximityConnect(context: Context, enabled: Boolean) {
+        preferences(context).edit().putBoolean(KEY_PROXIMITY, enabled).apply()
     }
 
     @Synchronized

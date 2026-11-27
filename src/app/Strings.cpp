@@ -69,7 +69,19 @@ namespace blitzdj::app
             "Log out",
             "Volume",
             "Scan",
-            "Speaker reconnected."
+            "Speaker reconnected.",
+            "Nearby speakers",
+            "Scanning...",
+            "Click Scan to find speakers around you, sorted by distance.",
+            "No speakers found nearby. Turn the speaker on and put it in pairing mode.",
+            "Very close",
+            "Near",
+            "In range",
+            "Far",
+            "Pair",
+            "Connect when nearby",
+            "When you get close to a speaker you already paired, BlitzDJ connects to it automatically, picking the closest one.",
+            "Connecting to %s..."
         };
 
         constexpr const char* portugueseTexts[] = {
@@ -122,7 +134,19 @@ namespace blitzdj::app
             "Sair da conta",
             "Volume",
             "Procurar",
-            "Caixa reconectada."
+            "Caixa reconectada.",
+            "Caixas por perto",
+            "Procurando...",
+            "Clique em Procurar para achar caixas ao seu redor, ordenadas pela distância.",
+            "Nenhuma caixa encontrada por perto. Ligue a caixa e coloque no modo de pareamento.",
+            "Muito perto",
+            "Perto",
+            "No alcance",
+            "Longe",
+            "Parear",
+            "Conectar ao chegar perto",
+            "Quando você chegar perto de uma caixa já pareada, o BlitzDJ conecta sozinho, escolhendo a mais próxima.",
+            "Conectando à %s..."
         };
 
         static_assert(sizeof(english) / sizeof(english[0]) == static_cast<int>(Text::Count));

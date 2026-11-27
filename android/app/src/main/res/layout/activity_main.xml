@@ -718,6 +718,140 @@
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
+                            android:text="@string/nearby_speakers" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/scanButton"
+                            style="@style/Widget.Material3.Button.TonalButton.Icon"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/scan"
+                            app:icon="@drawable/ic_search" />
+                    </LinearLayout>
+
+                    <com.google.android.material.progressindicator.LinearProgressIndicator
+                        android:id="@+id/scanProgress"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:indeterminate="true"
+                        android:visibility="gone" />
+
+                    <TextView
+                        android:id="@+id/nearbyEmpty"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:paddingVertical="8dp"
+                        android:text="@string/nearby_empty"
+                        android:textAppearance="?attr/textAppearanceBodyMedium"
+                        android:textColor="@color/text_secondary" />
+
+                    <androidx.recyclerview.widget.RecyclerView
+                        android:id="@+id/nearbyList"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:nestedScrollingEnabled="false" />
+
+                    <com.google.android.material.card.MaterialCardView
+                        style="@style/BlitzDJ.Card"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:padding="16dp">
+
+                            <com.google.android.material.materialswitch.MaterialSwitch
+                                android:id="@+id/proximitySwitch"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="@string/proximity_connect"
+                                android:textAppearance="?attr/textAppearanceTitleMedium" />
+
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="4dp"
+                                android:text="@string/proximity_connect_description"
+                                android:textAppearance="?attr/textAppearanceBodySmall"
+                                android:textColor="@color/text_secondary" />
+                        </LinearLayout>
+                    </com.google.android.material.card.MaterialCardView>
+
+                    <com.google.android.material.card.MaterialCardView
+                        android:id="@+id/nfcCard"
+                        style="@style/BlitzDJ.Card"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:visibility="gone">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:padding="16dp">
+
+                            <com.google.android.material.imageview.ShapeableImageView
+                                android:layout_width="44dp"
+                                android:layout_height="44dp"
+                                android:background="#FF3D2F00"
+                                android:importantForAccessibility="no"
+                                android:padding="10dp"
+                                android:src="@drawable/ic_nfc"
+                                app:shapeAppearanceOverlay="@style/BlitzDJ.Shape.Circle"
+                                app:tint="@color/accent" />
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="14dp"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="@string/nfc_title"
+                                    android:textAppearance="?attr/textAppearanceTitleMedium"
+                                    android:textColor="@color/text_primary" />
+
+                                <TextView
+                                    android:id="@+id/nfcDescription"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="@string/nfc_description"
+                                    android:textAppearance="?attr/textAppearanceBodySmall"
+                                    android:textColor="@color/text_secondary" />
+                            </LinearLayout>
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/nfcSettingsButton"
+                                style="@style/Widget.Material3.Button.TonalButton"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="8dp"
+                                android:text="@string/nfc_settings"
+                                android:visibility="gone" />
+                        </LinearLayout>
+                    </com.google.android.material.card.MaterialCardView>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="24dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            style="@style/BlitzDJ.SectionTitle"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
                             android:text="@string/spotify_connect" />
 
                         <com.google.android.material.button.MaterialButton

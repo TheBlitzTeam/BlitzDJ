@@ -1,7 +1,9 @@
 package com.theblitzteam.blitzdj
 
 import android.Manifest
+import android.app.PendingIntent
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.res.ColorStateList
 import android.graphics.Bitmap
 import android.graphics.RenderEffect
@@ -9,6 +11,8 @@ import android.graphics.Shader
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
+import android.nfc.NfcAdapter
+import android.provider.Settings
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -113,6 +117,14 @@ class MainActivity : AppCompatActivity() {
     private lateinit var refreshDevices: MaterialButton
     private lateinit var connectEmpty: TextView
     private lateinit var connectList: RecyclerView
+    private lateinit var scanButton: MaterialButton
+    private lateinit var scanProgress: LinearProgressIndicator
+    private lateinit var nearbyEmpty: TextView
+    private lateinit var nearbyList: RecyclerView
+    private lateinit var proximitySwitch: MaterialSwitch
+    private lateinit var nfcCard: View
+    private lateinit var nfcDescription: TextView
+    private lateinit var nfcSettingsButton: MaterialButton
     private lateinit var openSpotifyButton: MaterialButton
     private lateinit var logoutButton: MaterialButton
 
@@ -131,6 +143,12 @@ class MainActivity : AppCompatActivity() {
     private val searchAdapter = TrackAdapter(onPlay = { playUri(it.uri) }, onQueue = { queueUri(it.uri) })
     private val bluetoothAdapter = DeviceAdapter()
     private val connectAdapter = DeviceAdapter()
+    private val nearbyAdapter = DeviceAdapter()
+
+    private var nfcAdapter: NfcAdapter? = null
+    private var proximityConnect = false
+    private var scanRequested = false
+    private var userScan = false
 
     private var authenticated = false
     private var hasPlayback = false
@@ -153,10 +171,34 @@ class MainActivity : AppCompatActivity() {
     private var lastOutputType: SpeakerManager.OutputType? = null
     private var resumeOnReconnect = false
     private var partyMode = false
+    private var scanButtonUsed = false
 
-    private val bluetoothPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
+    private val bluetoothPermission = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         speakers.connectProfile()
         refreshSpeakers()
+
+        if (scanRequested) {
+            scanRequested = false
+            startScan()
+        }
+
+        if (proximityConnect && !speakers.hasScanPermission()) {
+            setProximityConnect(false)
+        }
+    }
+
+    private val proximityRunnable = object : Runnable {
+        override fun run() {
+            if (!polling || !proximityConnect) {
+                return
+            }
+
+            if (speakers.currentOutput().type != SpeakerManager.OutputType.BLUETOOTH && !speakers.isDiscovering) {
+                speakers.startDiscovery(clear = false)
+            }
+
+            mainHandler.postDelayed(this, PROXIMITY_INTERVAL_MS)
+        }
     }
 
     private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
@@ -198,6 +240,23 @@ class MainActivity : AppCompatActivity() {
         setupLogin()
 
         speakers = SpeakerManager(this) { mainHandler.post { onSpeakersChanged() } }
+        speakers.onNearbyChanged = { mainHandler.post { renderNearby() } }
+        speakers.onConnecting = { name, success ->
+            mainHandler.post {
+                toast(getString(if (success) R.string.connecting_to else R.string.bluetooth_connect_fallback, name))
+
+                if (!success) {
+                    speakers.openBluetoothSettings(this)
+                }
+            }
+        }
+
+        nfcAdapter = NfcAdapter.getDefaultAdapter(this)
+        proximityConnect = BlitzClient.proximityConnect(this) && speakers.hasScanPermission()
+        speakers.autoConnect = proximityConnect
+        updatingControls = true
+        proximitySwitch.isChecked = proximityConnect
+        updatingControls = false
 
         partyMode = BlitzClient.partyMode(this)
         updatingControls = true
@@ -213,12 +272,21 @@ class MainActivity : AppCompatActivity() {
         } else {
             refreshAccount(autoLogin = true)
         }
+
+        if (NfcHandover.isHandover(intent)) {
+            handleNfc(intent)
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        handleRedirect(intent)
+
+        if (NfcHandover.isHandover(intent)) {
+            handleNfc(intent)
+        } else {
+            handleRedirect(intent)
+        }
     }
 
     override fun onResume() {
@@ -228,12 +296,24 @@ class MainActivity : AppCompatActivity() {
         onSpeakersChanged()
         mainHandler.post(pollRunnable)
         mainHandler.post(tickRunnable)
+        enableNfcDispatch()
+        renderNfc()
+
+        if (proximityConnect) {
+            mainHandler.postDelayed(proximityRunnable, 1500)
+        }
     }
 
     override fun onPause() {
         polling = false
         mainHandler.removeCallbacks(pollRunnable)
         mainHandler.removeCallbacks(tickRunnable)
+        mainHandler.removeCallbacks(proximityRunnable)
+        runCatching { nfcAdapter?.disableForegroundDispatch(this) }
+
+        if (!partyMode) {
+            speakers.stopDiscovery()
+        }
 
         if (!partyMode) {
             speakers.stop()
@@ -310,6 +390,14 @@ class MainActivity : AppCompatActivity() {
         refreshDevices = findViewById(R.id.refreshDevices)
         connectEmpty = findViewById(R.id.connectEmpty)
         connectList = findViewById(R.id.connectList)
+        scanButton = findViewById(R.id.scanButton)
+        scanProgress = findViewById(R.id.scanProgress)
+        nearbyEmpty = findViewById(R.id.nearbyEmpty)
+        nearbyList = findViewById(R.id.nearbyList)
+        proximitySwitch = findViewById(R.id.proximitySwitch)
+        nfcCard = findViewById(R.id.nfcCard)
+        nfcDescription = findViewById(R.id.nfcDescription)
+        nfcSettingsButton = findViewById(R.id.nfcSettingsButton)
         openSpotifyButton = findViewById(R.id.openSpotifyButton)
         logoutButton = findViewById(R.id.logoutButton)
 
@@ -352,6 +440,7 @@ class MainActivity : AppCompatActivity() {
             suggestionList to suggestionAdapter,
             searchResults to searchAdapter,
             bluetoothList to bluetoothAdapter,
+            nearbyList to nearbyAdapter,
             connectList to connectAdapter
         ).forEach { (list, adapter) ->
             list.layoutManager = LinearLayoutManager(this)
@@ -520,9 +609,27 @@ class MainActivity : AppCompatActivity() {
         logoutButton.setOnClickListener { logout() }
 
         bluetoothPermissionButton.setOnClickListener {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                bluetoothPermission.launch(Manifest.permission.BLUETOOTH_CONNECT)
+            bluetoothPermission.launch(speakers.requiredPermissions())
+        }
+
+        scanButton.setOnClickListener {
+            if (speakers.isDiscovering) {
+                speakers.stopDiscovery()
+                renderNearby()
+            } else {
+                startScan()
             }
+        }
+
+        proximitySwitch.setOnCheckedChangeListener { _, checked ->
+            if (!updatingControls) {
+                setProximityConnect(checked)
+            }
+        }
+
+        nfcSettingsButton.setOnClickListener {
+            runCatching { startActivity(Intent(Settings.ACTION_NFC_SETTINGS)) }
+                .onFailure { runCatching { startActivity(Intent(Settings.ACTION_WIRELESS_SETTINGS)) } }
         }
 
         partySwitch.setOnCheckedChangeListener { _, checked ->
@@ -570,6 +677,8 @@ class MainActivity : AppCompatActivity() {
             R.id.nav_speakers -> {
                 refreshSpeakers()
                 loadConnectDevices()
+                renderNearby()
+                renderNfc()
             }
         }
     }
@@ -1152,6 +1261,163 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun startScan() {
+        if (!speakers.hasScanPermission()) {
+            scanRequested = true
+            bluetoothPermission.launch(speakers.requiredPermissions())
+            return
+        }
+
+        if (!speakers.isBluetoothEnabled()) {
+            toast(getString(R.string.bluetooth_off))
+            speakers.openBluetoothSettings(this)
+            return
+        }
+
+        userScan = true
+        speakers.startDiscovery(clear = true)
+        renderNearby()
+    }
+
+    private fun setProximityConnect(enabled: Boolean) {
+        if (enabled && !speakers.hasScanPermission()) {
+            bluetoothPermission.launch(speakers.requiredPermissions())
+        }
+
+        proximityConnect = enabled
+        speakers.autoConnect = enabled
+        BlitzClient.saveProximityConnect(this, enabled)
+
+        updatingControls = true
+        proximitySwitch.isChecked = enabled
+        updatingControls = false
+
+        mainHandler.removeCallbacks(proximityRunnable)
+
+        if (enabled && polling) {
+            mainHandler.post(proximityRunnable)
+        }
+    }
+
+    private fun renderNearby() {
+        val scanning = speakers.isDiscovering
+        val list = speakers.nearbySpeakers()
+
+        scanProgress.visibility = if (scanning && userScan) View.VISIBLE else View.GONE
+        scanButton.setText(if (scanning && userScan) R.string.scanning else R.string.scan)
+
+        if (!scanning) {
+            userScan = false
+        }
+
+        nearbyEmpty.visibility = if (list.isEmpty()) View.VISIBLE else View.GONE
+        nearbyEmpty.setText(
+            when {
+                !speakers.hasScanPermission() -> R.string.scan_permission
+                list.isEmpty() && !scanning && speakers.isBluetoothEnabled() && scanButtonUsed -> R.string.nearby_none_found
+                else -> R.string.nearby_empty
+            }
+        )
+
+        if (scanning) {
+            scanButtonUsed = true
+        }
+
+        nearbyAdapter.submit(list.map { speaker ->
+            val proximity = getString(
+                when (speaker.proximity) {
+                    SpeakerManager.Proximity.VERY_CLOSE -> R.string.proximity_very_close
+                    SpeakerManager.Proximity.NEAR -> R.string.proximity_near
+                    SpeakerManager.Proximity.IN_RANGE -> R.string.proximity_in_range
+                    SpeakerManager.Proximity.FAR -> R.string.proximity_far
+                }
+            )
+
+            val status = getString(if (speaker.bonded) R.string.paired else R.string.pair_and_connect)
+
+            DeviceItem(
+                key = speaker.address,
+                name = speaker.name,
+                subtitle = "$proximity • ${speaker.rssi} dBm • $status",
+                icon = R.drawable.ic_bluetooth,
+                highlighted = speaker.proximity == SpeakerManager.Proximity.VERY_CLOSE,
+                actionLabel = getString(if (speaker.bonded) R.string.connect_device else R.string.pair_and_connect),
+                onAction = { connectNearby(speaker.address, speaker.name) }
+            )
+        })
+    }
+
+    private fun connectNearby(address: String, name: String) {
+        if (!speakers.hasPermission()) {
+            bluetoothPermission.launch(speakers.requiredPermissions())
+            return
+        }
+
+        if (speakers.pairAndConnect(address)) {
+            toast(getString(R.string.connecting_to, name))
+        } else {
+            toast(getString(R.string.bluetooth_connect_fallback))
+            speakers.openBluetoothSettings(this)
+        }
+
+        mainHandler.postDelayed({ refreshSpeakers() }, 2500)
+    }
+
+    private fun enableNfcDispatch() {
+        val adapter = nfcAdapter ?: return
+
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0
+        val pending = PendingIntent.getActivity(
+            this,
+            NFC_REQUEST,
+            Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            flags
+        )
+
+        val filters = listOf(NfcHandover.CLASSIC_MIME, NfcHandover.LOW_ENERGY_MIME).mapNotNull { mime ->
+            runCatching { IntentFilter(NfcAdapter.ACTION_NDEF_DISCOVERED).apply { addDataType(mime) } }.getOrNull()
+        }
+
+        runCatching { adapter.enableForegroundDispatch(this, pending, filters.toTypedArray(), null) }
+    }
+
+    private fun renderNfc() {
+        val adapter = nfcAdapter
+
+        if (adapter == null) {
+            nfcCard.visibility = View.GONE
+            return
+        }
+
+        val enabled = runCatching { adapter.isEnabled }.getOrDefault(false)
+        nfcCard.visibility = View.VISIBLE
+        nfcDescription.setText(if (enabled) R.string.nfc_description else R.string.nfc_disabled)
+        nfcSettingsButton.visibility = if (enabled) View.GONE else View.VISIBLE
+    }
+
+    private fun handleNfc(intent: Intent) {
+        val target = NfcHandover.parse(intent)
+        intent.action = null
+
+        if (target == null) {
+            toast(getString(R.string.nfc_unknown_tag))
+            return
+        }
+
+        if (!speakers.hasPermission()) {
+            bluetoothPermission.launch(speakers.requiredPermissions())
+            return
+        }
+
+        val name = target.name ?: speakers.deviceName(target.address) ?: target.address
+
+        if (authenticated) {
+            bottomNav.selectedItemId = R.id.nav_speakers
+        }
+
+        connectNearby(target.address, name)
+    }
+
     private fun applyPartyMode() {
         if (partyMode) {
             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -1240,5 +1506,7 @@ class MainActivity : AppCompatActivity() {
         private const val RECONNECT_RESUME_DELAY_MS = 1500L
         private const val PROGRESS_SCALE = 1000f
         private const val SPOTIFY_PACKAGE = "com.spotify.music"
+        private const val PROXIMITY_INTERVAL_MS = 30000L
+        private const val NFC_REQUEST = 20
     }
 }

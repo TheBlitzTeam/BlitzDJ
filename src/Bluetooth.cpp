@@ -58,6 +58,8 @@ int propertyInt(GVariant* props, const char* name, int fallback) {
     if (g_variant_is_of_type(value, G_VARIANT_TYPE_INT16)) result = g_variant_get_int16(value);
     else if (g_variant_is_of_type(value, G_VARIANT_TYPE_BYTE)) result = g_variant_get_byte(value);
     else if (g_variant_is_of_type(value, G_VARIANT_TYPE_UINT16)) result = g_variant_get_uint16(value);
+    else if (g_variant_is_of_type(value, G_VARIANT_TYPE_UINT32)) result = static_cast<int>(g_variant_get_uint32(value));
+    else if (g_variant_is_of_type(value, G_VARIANT_TYPE_INT32)) result = g_variant_get_int32(value);
     g_variant_unref(value);
     return result;
 }
@@ -103,6 +105,9 @@ Snapshot snapshot(GDBusConnection* bus, std::string& errorMessage) {
             d.connected = propertyBool(device, "Connected");
             d.connectionState = d.connected ? BluetoothConnectionState::Connected : BluetoothConnectionState::Disconnected;
             d.signalStrength = propertyInt(device, "RSSI", 0);
+            const int deviceClass = propertyInt(device, "Class", 0);
+            if (((deviceClass >> 8) & 0x1F) == 0x04 || (deviceClass & (1 << 21)) != 0 || (deviceClass & (1 << 18)) != 0) d.audioCapable = true;
+            if (propertyString(device, "Icon").rfind("audio", 0) == 0) d.audioCapable = true;
             GVariant* uuids = g_variant_lookup_value(device, "UUIDs", G_VARIANT_TYPE("as"));
             if (uuids) {
                 GVariantIter uuidIter;
@@ -381,7 +386,21 @@ bool Bluetooth::connectAudioDevice(const std::string& id) {
     auto device = findDevice(id);
     if (!device) return false;
     if (!device->audioCapable) { setError(BluetoothError::NotSupported, "Device does not advertise a supported audio profile"); return false; }
+    if (!device->paired) {
+        if (scanning_) stopScan();
+        if (!pairDevice(id)) return false;
+    }
+    if (!device->trusted) trustDevice(id, true);
     return connectDevice(id);
+}
+std::vector<BluetoothDevice> Bluetooth::getNearbyAudioDevices() {
+    auto devices = getAudioDevices();
+    devices.erase(std::remove_if(devices.begin(), devices.end(), [](const auto& d) { return d.signalStrength == 0 && !d.connected; }), devices.end());
+    std::sort(devices.begin(), devices.end(), [](const auto& a, const auto& b) {
+        if (a.connected != b.connected) return a.connected;
+        return a.signalStrength > b.signalStrength;
+    });
+    return devices;
 }
 bool Bluetooth::disconnectAudioDevice(const std::string& id) { return disconnectDevice(id); }
 bool Bluetooth::setDefaultAudioDevice(const std::string& id) {

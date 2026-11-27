@@ -15,6 +15,7 @@ BlitzDJ is a C++17 core with a desktop app (and a terminal app), a native Androi
 - Android app with Material 3 design, album art, dynamic colors, queue view and mini player
 - Party mode on Android: keeps the screen awake and resumes music when a Bluetooth speaker reconnects
 - Bluetooth speaker list, output switching and Spotify Connect devices on Android
+- Proximity Bluetooth: nearby speakers sorted by signal strength, automatic connection to the closest paired speaker, and NFC tap to pair on Android
 - Bluetooth device management on Linux (BlueZ)
 
 ## Platforms
