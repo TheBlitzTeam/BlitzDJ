@@ -126,7 +126,7 @@ namespace blitzdj
                 case 401:
                     return "Spotify session expired. Log in again.";
                 case 403:
-                    return "Spotify refused this action. It needs Premium, and the account must be added in the app's User Management.";
+                    return "Spotify refused this action. Check that this account is added in User Management of your app in the Spotify Dashboard.";
                 case 429:
                     return "Too many requests to Spotify. Wait a few seconds and try again.";
                 default:
@@ -467,6 +467,18 @@ namespace blitzdj
         if (message.empty() && response.statusCode == 404 && context.find("/me/player") != std::string::npos)
         {
             message = statusError(response.statusCode, context);
+        }
+
+        const std::string lowerBody = [&response]
+        {
+            std::string value = response.body;
+            std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            return value;
+        }();
+
+        if (message.empty() && lowerBody.find("may not be registered") != std::string::npos)
+        {
+            message = "This Spotify account is not allowed to use this app. Add its e-mail in User Management of your app in the Spotify Dashboard, or log in with the account that created the app.";
         }
 
         if (message.empty())

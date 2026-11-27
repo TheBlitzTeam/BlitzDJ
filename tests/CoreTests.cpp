@@ -118,6 +118,11 @@ namespace
                 response.statusCode = 404;
                 response.body = R"({"error":{"status":404,"message":"Player command failed: No active device found","reason":"NO_ACTIVE_DEVICE"}})";
             }
+            else if (request.url.find("/me/player/next") == std::string::npos && request.url.find("/me/player/shuffle") != std::string::npos)
+            {
+                response.statusCode = 403;
+                response.body = "Check settings on developer.spotify.com/dashboard, the user may not be registered.";
+            }
             else if (request.url.find("/me/player/volume") != std::string::npos)
             {
                 response.statusCode = 502;
@@ -195,6 +200,9 @@ namespace
         check(!restored.pause(), "pause without device fails");
         check(restored.getLastError().rfind("No active Spotify device.", 0) == 0, "no device message");
         check(restored.getLastError().find("PUT /me/player/pause") != std::string::npos, "error has endpoint");
+
+        check(!restored.setShuffle(true), "unregistered user fails");
+        check(restored.getLastError().find("User Management") != std::string::npos, "unregistered user message");
 
         check(!restored.setVolume(40), "volume gateway error fails");
         check(restored.getLastError().find("HTTP 502") != std::string::npos, "error has status");
