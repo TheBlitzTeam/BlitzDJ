@@ -71,6 +71,10 @@ namespace blitzdj::app
         PasteUrlHint,
         FinishLogin,
         OpenBrowserAgain,
+        PlayingAudio,
+        SystemOutput,
+        NoConnectedSpeakers,
+        SoundSettings,
         Count
     };
 

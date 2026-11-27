@@ -86,7 +86,11 @@ namespace blitzdj::app
             "Port 8888 is busy or reserved by the system. After authorizing in the browser, copy the full address from the address bar (it starts with http://127.0.0.1:8888/callback) and paste it below. It is fine if the page shows an error.",
             "Paste the browser address here",
             "Finish login",
-            "Open browser again"
+            "Open browser again",
+            "Playing audio",
+            "System output",
+            "No Bluetooth speaker connected. Connect one in the system Bluetooth settings and it shows up here.",
+            "Sound"
         };
 
         constexpr const char* portugueseTexts[] = {
@@ -156,7 +160,11 @@ namespace blitzdj::app
             "A porta 8888 está ocupada por outro programa ou reservada pelo sistema. Depois de autorizar no navegador, copie o endereço completo da barra de endereços (começa com http://127.0.0.1:8888/callback) e cole abaixo. Tudo bem se a página mostrar erro.",
             "Cole aqui o endereço do navegador",
             "Concluir login",
-            "Abrir o navegador de novo"
+            "Abrir o navegador de novo",
+            "Tocando áudio",
+            "Saída do sistema",
+            "Nenhuma caixa Bluetooth conectada. Conecte uma nas configurações de Bluetooth do sistema e ela aparece aqui.",
+            "Som"
         };
 
         static_assert(sizeof(english) / sizeof(english[0]) == static_cast<int>(Text::Count));

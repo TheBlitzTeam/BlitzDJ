@@ -151,6 +151,8 @@ set(BLITZDJ_HAS_BLUETOOTH OFF)
 
 list(APPEND BLITZDJ_CORE_SOURCES "${BLITZDJ_SOURCE_DIR}/Bluetooth.cpp")
 list(APPEND BLITZDJ_PUBLIC_HEADERS "${BLITZDJ_INCLUDE_DIR}/Bluetooth.hpp")
+list(APPEND BLITZDJ_CORE_SOURCES "${BLITZDJ_SOURCE_DIR}/AudioOutputs.cpp")
+list(APPEND BLITZDJ_PUBLIC_HEADERS "${BLITZDJ_INCLUDE_DIR}/AudioOutputs.hpp")
 
 if(BLITZDJ_ENABLE_BLUETOOTH)
     if(BLITZDJ_PLATFORM STREQUAL "Linux")
@@ -203,7 +205,11 @@ if(BLITZDJ_HAS_BLUETOOTH)
 endif()
 
 if(WIN32)
-    target_link_libraries(BlitzDJCore PUBLIC ws2_32)
+    target_link_libraries(BlitzDJCore PUBLIC ws2_32 ole32)
+endif()
+
+if(BLITZDJ_PLATFORM STREQUAL "macOS")
+    target_link_libraries(BlitzDJCore PUBLIC "-framework CoreAudio" "-framework CoreFoundation")
 endif()
 
 target_compile_definitions(BlitzDJCore PUBLIC

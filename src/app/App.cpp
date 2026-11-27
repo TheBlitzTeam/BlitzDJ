@@ -846,7 +846,7 @@ namespace blitzdj::app
 
     void App::checkSpeakers()
     {
-        if (!bluetoothReady_ || !partyMode_)
+        if ((!bluetoothReady_ && !audioOutputsSupported()) || !partyMode_)
         {
             return;
         }
@@ -861,7 +861,8 @@ namespace blitzdj::app
         lastSpeakerCheck_ = now;
 
         const bool playing = hasPlayback_ && playback_.playing;
-        const bool tryReconnect = !lostSpeaker_.empty() && now - lastReconnectAttempt_ >= RECONNECT_INTERVAL;
+        const bool native = bluetoothReady_;
+        const bool tryReconnect = native && !lostSpeaker_.empty() && now - lastReconnectAttempt_ >= RECONNECT_INTERVAL;
         const std::string lost = lostSpeaker_;
 
         if (tryReconnect)
@@ -869,7 +870,7 @@ namespace blitzdj::app
             lastReconnectAttempt_ = now;
         }
 
-        bluetoothQueue_.post([this, playing, tryReconnect, lost]
+        bluetoothQueue_.post([this, playing, tryReconnect, lost, native]
         {
             if (tryReconnect)
             {
@@ -878,11 +879,24 @@ namespace blitzdj::app
 
             std::vector<std::string> connected;
 
-            for (const auto& device : bluetooth_->getConnectedDevices())
+            if (native)
             {
-                if (device.audioCapable)
+                for (const auto& device : bluetooth_->getConnectedDevices())
                 {
-                    connected.push_back(device.id);
+                    if (device.audioCapable)
+                    {
+                        connected.push_back(device.id);
+                    }
+                }
+            }
+            else
+            {
+                for (const auto& output : getAudioOutputDevices())
+                {
+                    if (output.bluetooth)
+                    {
+                        connected.push_back(output.id);
+                    }
                 }
             }
 
@@ -917,6 +931,34 @@ namespace blitzdj::app
                 }
 
                 connectedSpeakers_ = std::move(connected);
+            });
+        });
+    }
+
+    void App::loadOutputs()
+    {
+        if (!audioOutputsSupported() || loadingOutputs_)
+        {
+            return;
+        }
+
+        loadingOutputs_ = true;
+        lastOutputsRefresh_ = Clock::now();
+
+        bluetoothQueue_.post([this]
+        {
+            auto outputs = getAudioOutputDevices();
+
+            std::stable_sort(outputs.begin(), outputs.end(), [](const AudioOutputDevice& a, const AudioOutputDevice& b)
+            {
+                return a.isDefault && !b.isDefault;
+            });
+
+            main_.post([this, outputs = std::move(outputs)]() mutable
+            {
+                loadingOutputs_ = false;
+                outputsLoaded_ = true;
+                outputs_ = std::move(outputs);
             });
         });
     }
@@ -1154,6 +1196,16 @@ namespace blitzdj::app
         updateScan();
         checkProximity();
 
+        if (page_ == Page::Speakers && Clock::now() - lastOutputsRefresh_ >= std::chrono::seconds(4))
+        {
+            loadOutputs();
+
+            if (bluetoothReady_ && !scanning_)
+            {
+                loadSpeakers();
+            }
+        }
+
         const auto art = hasPlayback_ ? images_.get(playback_.track.imageUrl, false) : Image{};
         targetArtColor_ = art.ready ? art.color : ImVec4(0.1f, 0.1f, 0.12f, 1.0f);
 
@@ -1184,6 +1236,7 @@ namespace blitzdj::app
             case Page::Speakers:
                 loadDevices();
                 loadSpeakers();
+                loadOutputs();
                 break;
         }
     }
@@ -1897,11 +1950,22 @@ namespace blitzdj::app
                 }
             }
 
-            const char* action = bluetoothReady_ ? nullptr : tr(Text::BluetoothOpenSettings);
+            for (const auto& device : outputs_)
+            {
+                if (device.isDefault)
+                {
+                    output = device.name;
+                    outputType = device.bluetooth ? "Bluetooth" : tr(Text::SystemOutput);
+                    outputIcon = device.bluetooth ? Icon::Bluetooth : Icon::Volume;
+                    break;
+                }
+            }
+
+            const char* action = audioOutputsSupported() ? tr(Text::SoundSettings) : nullptr;
 
             if (deviceRow("current", outputIcon, output.empty() ? std::string(tr(Text::NothingPlaying)) : output, outputType, true, action))
             {
-                openBluetoothSettings();
+                openSoundSettings();
             }
         }
 
@@ -2106,6 +2170,43 @@ namespace blitzdj::app
             }
 
             endCard();
+        }
+        else if (audioOutputsSupported())
+        {
+            ImGui::SameLine(ImGui::GetCursorStartPos().x + width - unit * 2.4f);
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() - unit * 0.4f);
+
+            if (iconButton("refresh_outputs", Icon::Refresh, unit * 2.4f, TEXT_SECONDARY, 0.55f))
+            {
+                loadOutputs();
+            }
+
+            bool any = false;
+
+            for (const auto& device : outputs_)
+            {
+                if (!device.bluetooth)
+                {
+                    continue;
+                }
+
+                any = true;
+
+                deviceRow(("output_" + device.id).c_str(), Icon::Bluetooth, device.name,
+                    device.isDefault ? tr(Text::PlayingAudio) : tr(Text::Connected), device.isDefault, nullptr);
+            }
+
+            if (!any && outputsLoaded_)
+            {
+                wrappedText(tr(Text::NoConnectedSpeakers), TEXT_SECONDARY, width);
+            }
+
+            ImGui::Dummy(ImVec2(0, unit * 0.3f));
+
+            if (pillButton(tr(Text::BluetoothOpenSettings), false))
+            {
+                openBluetoothSettings();
+            }
         }
         else
         {

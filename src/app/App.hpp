@@ -1,5 +1,6 @@
 #pragma once
 
+#include "AudioOutputs.hpp"
 #include "BlitzDJ.hpp"
 #include "Bluetooth.hpp"
 #include "ImageCache.hpp"
@@ -100,6 +101,10 @@ namespace blitzdj::app
         std::vector<SpotifyDevice> devices_;
         std::vector<BluetoothDevice> speakers_;
         std::vector<BluetoothDevice> nearby_;
+        std::vector<AudioOutputDevice> outputs_;
+        bool loadingOutputs_ = false;
+        bool outputsLoaded_ = false;
+        Clock::time_point lastOutputsRefresh_ = Clock::time_point{};
 
         bool loadingSuggestions_ = false;
         bool searching_ = false;
@@ -150,6 +155,7 @@ namespace blitzdj::app
         void loadDevices();
         void loadSpeakers();
         void checkSpeakers();
+        void loadOutputs();
         void startScan();
         void updateScan();
         void loadNearby();

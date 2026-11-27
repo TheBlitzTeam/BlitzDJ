@@ -74,4 +74,15 @@ namespace blitzdj::app
         runDetached("gnome-control-center bluetooth || blueman-manager || kcmshell6 bluetooth || kcmshell5 bluetooth");
 #endif
     }
+
+    void openSoundSettings()
+    {
+#ifdef _WIN32
+        openUrl("ms-settings:sound");
+#elif defined(__APPLE__)
+        openUrl("x-apple.systempreferences:com.apple.Sound-Settings.extension");
+#else
+        runDetached("gnome-control-center sound || pavucontrol || kcmshell6 kcm_pulseaudio || kcmshell5 kcm_pulseaudio");
+#endif
+    }
 }

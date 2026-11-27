@@ -10,4 +10,6 @@ namespace blitzdj::app
     void openUrl(const std::string& url);
 
     void openBluetoothSettings();
+
+    void openSoundSettings();
 }
