@@ -929,6 +929,17 @@ int main()
 
     BlitzDJ dj(config);
 
+    const auto logPath = directory / "blitzdj.log";
+    dj.spotify().setErrorLogger([logPath](const std::string& entry)
+    {
+        std::ofstream file(logPath, std::ios::app);
+
+        if (file)
+        {
+            file << entry << "\n";
+        }
+    });
+
     if (!dj.initialize())
     {
         std::cerr << "Failed to initialize BlitzDJ: " << dj.getLastError() << "\n";

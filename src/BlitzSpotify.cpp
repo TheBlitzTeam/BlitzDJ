@@ -90,6 +90,75 @@ namespace blitzdj
             return fallback;
         }
 
+        std::string reasonError(const std::string& reason)
+        {
+            if (reason == "NO_ACTIVE_DEVICE")
+            {
+                return "No active Spotify device. Open Spotify on a phone, computer or speaker and play something.";
+            }
+
+            if (reason == "PREMIUM_REQUIRED")
+            {
+                return "This action needs a Spotify Premium account.";
+            }
+
+            if (reason == "VOLUME_CONTROL_DISALLOW")
+            {
+                return "This device does not allow volume control.";
+            }
+
+            return {};
+        }
+
+        std::string statusError(long status, const std::string& context)
+        {
+            if (status == 404 && context.find("/me/player") != std::string::npos)
+            {
+                return "No active Spotify device. Open Spotify on a phone, computer or speaker and play something.";
+            }
+
+            switch (status)
+            {
+                case 0:
+                    return "Could not reach Spotify. Check your internet connection.";
+                case 400:
+                    return "Spotify rejected the request.";
+                case 401:
+                    return "Spotify session expired. Log in again.";
+                case 403:
+                    return "Spotify refused this action. It needs Premium, and the account must be added in the app's User Management.";
+                case 429:
+                    return "Too many requests to Spotify. Wait a few seconds and try again.";
+                default:
+                    break;
+            }
+
+            if (status >= 500)
+            {
+                return "Spotify is temporarily unavailable. Try again in a moment.";
+            }
+
+            return {};
+        }
+
+        std::string bodySnippet(const std::string& body)
+        {
+            std::string snippet;
+
+            for (char c : body)
+            {
+                if (snippet.size() >= 300)
+                {
+                    snippet += "...";
+                    break;
+                }
+
+                snippet.push_back(c == '\n' || c == '\r' ? ' ' : c);
+            }
+
+            return snippet;
+        }
+
         std::string randomToken(std::size_t bytes)
         {
             const auto data = crypto::randomBytes(bytes);
@@ -145,6 +214,12 @@ namespace blitzdj
     {
         Lock lock(mutex_);
         http_ = std::move(client);
+    }
+
+    void BlitzSpotify::setErrorLogger(ErrorLogger logger)
+    {
+        Lock lock(mutex_);
+        errorLogger_ = std::move(logger);
     }
 
     void BlitzSpotify::setSessionPath(const std::string& path)
@@ -356,7 +431,7 @@ namespace blitzdj
             "&code_challenge_method=S256&code_challenge=" + challenge;
     }
 
-    SpotifyResponse BlitzSpotify::finishResponse(const HttpResponse& response, const std::string& fallbackError)
+    SpotifyResponse BlitzSpotify::finishResponse(const HttpResponse& response, const std::string& context)
     {
         SpotifyResponse result;
         result.statusCode = response.statusCode;
@@ -377,14 +452,61 @@ namespace blitzdj
         if (result.success)
         {
             clearError();
+            return result;
         }
-        else
-        {
-            result.error = !response.error.empty()
-                ? response.error
-                : errorMessage(result.data, fallbackError);
 
-            setError(result.error, result.statusCode);
+        std::string reason;
+
+        if (result.data.is_object())
+        {
+            reason = getString(objectAt(result.data, "error"), "reason");
+        }
+
+        std::string message = reasonError(reason);
+
+        if (message.empty() && response.statusCode == 404 && context.find("/me/player") != std::string::npos)
+        {
+            message = statusError(response.statusCode, context);
+        }
+
+        if (message.empty())
+        {
+            message = errorMessage(result.data, "");
+        }
+
+        if (message.empty())
+        {
+            message = statusError(response.statusCode, context);
+        }
+
+        if (message.empty() && !response.error.empty())
+        {
+            message = response.error;
+        }
+
+        if (message.empty())
+        {
+            message = "Spotify request failed.";
+        }
+
+        result.error = message + " (HTTP " + std::to_string(response.statusCode) + ", " + context + ")";
+        setError(result.error, result.statusCode);
+
+        if (errorLogger_)
+        {
+            std::string entry = context + " -> HTTP " + std::to_string(response.statusCode);
+
+            if (!response.error.empty())
+            {
+                entry += " transport: " + response.error;
+            }
+
+            if (!response.body.empty())
+            {
+                entry += " body: " + bodySnippet(response.body);
+            }
+
+            errorLogger_(entry);
         }
 
         return result;
@@ -426,7 +548,7 @@ namespace blitzdj
             ));
         }
 
-        return finishResponse(response, "Spotify token request failed.");
+        return finishResponse(response, "POST /api/token");
     }
 
     bool BlitzSpotify::updateTokens(const Json& response)
@@ -722,7 +844,7 @@ namespace blitzdj
             std::this_thread::sleep_for(std::chrono::seconds(delay));
         }
 
-        return finishResponse(response, "Spotify API request failed.");
+        return finishResponse(response, method + " " + endpoint.substr(0, endpoint.find('?')));
     }
 
     SpotifyTrack BlitzSpotify::parseTrack(const Json& data) const

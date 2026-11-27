@@ -113,6 +113,16 @@ namespace
                 ++playbackCalls;
                 response.statusCode = playbackCalls == 1 ? 401 : 204;
             }
+            else if (request.url.find("/me/player/pause") != std::string::npos)
+            {
+                response.statusCode = 404;
+                response.body = R"({"error":{"status":404,"message":"Player command failed: No active device found","reason":"NO_ACTIVE_DEVICE"}})";
+            }
+            else if (request.url.find("/me/player/volume") != std::string::npos)
+            {
+                response.statusCode = 502;
+                response.body = "<html>Bad Gateway</html>";
+            }
             else if (request.url.find("/search") != std::string::npos)
             {
                 response.statusCode = 200;
@@ -177,7 +187,18 @@ namespace
         check(!otherClient.loadSession(), "session ignored for other client");
 
         check(!restored.getTrack("missing").has_value(), "404 handled");
-        check(restored.getLastError() == "Not found", "api error message");
+        check(restored.getLastError() == "Not found (HTTP 404, GET /tracks/missing)", "api error message");
+
+        std::vector<std::string> logged;
+        restored.setErrorLogger([&logged](const std::string& entry) { logged.push_back(entry); });
+
+        check(!restored.pause(), "pause without device fails");
+        check(restored.getLastError().rfind("No active Spotify device.", 0) == 0, "no device message");
+        check(restored.getLastError().find("PUT /me/player/pause") != std::string::npos, "error has endpoint");
+
+        check(!restored.setVolume(40), "volume gateway error fails");
+        check(restored.getLastError().find("HTTP 502") != std::string::npos, "error has status");
+        check(!logged.empty() && logged.back().find("Bad Gateway") != std::string::npos, "error body logged");
 
         restored.logout();
         check(!std::filesystem::exists(sessionPath), "logout removes session");

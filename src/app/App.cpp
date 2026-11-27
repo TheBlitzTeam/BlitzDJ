@@ -9,7 +9,9 @@
 #include <cctype>
 #include <cmath>
 #include <cstdio>
+#include <ctime>
 #include <fstream>
+#include <mutex>
 #include <thread>
 
 namespace blitzdj::app
@@ -361,6 +363,34 @@ namespace blitzdj::app
             return 1;
         }
 
+        void appendLog(const std::filesystem::path& path, const std::string& entry)
+        {
+            static std::mutex mutex;
+            std::lock_guard<std::mutex> lock(mutex);
+
+            std::error_code error;
+
+            if (std::filesystem::exists(path, error) && std::filesystem::file_size(path, error) > 512 * 1024)
+            {
+                std::filesystem::path old = path;
+                old += ".old";
+                std::filesystem::remove(old, error);
+                std::filesystem::rename(path, old, error);
+            }
+
+            std::ofstream file(path, std::ios::app);
+
+            if (!file)
+            {
+                return;
+            }
+
+            const std::time_t now = std::time(nullptr);
+            char stamp[32] = {};
+            std::strftime(stamp, sizeof(stamp), "%Y-%m-%d %H:%M:%S", std::localtime(&now));
+            file << stamp << "  " << entry << "\n";
+        }
+
         bool isPortuguese()
         {
             return std::string(tr(Text::Search)) == "Buscar";
@@ -427,6 +457,9 @@ namespace blitzdj::app
 
         dj_ = std::make_unique<BlitzDJ>(config);
         configuredRedirect_ = config.redirectUri;
+
+        const auto logPath = directory / "blitzdj.log";
+        dj_->spotify().setErrorLogger([logPath](const std::string& entry) { appendLog(logPath, entry); });
 
         if (!dj_->initialize())
         {

@@ -4,6 +4,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -99,6 +100,10 @@ namespace blitzdj
         bool initialize();
 
         void setHttpClient(std::unique_ptr<HttpClient> client);
+
+        using ErrorLogger = std::function<void(const std::string&)>;
+
+        void setErrorLogger(ErrorLogger logger);
 
         void setSessionPath(const std::string& path);
         std::string getSessionPath() const;
@@ -215,6 +220,8 @@ namespace blitzdj
         std::string lastError_;
         long lastStatusCode_ = 0;
 
+        ErrorLogger errorLogger_;
+
         mutable std::recursive_mutex mutex_;
 
         static constexpr const char* API_URL =
@@ -240,7 +247,7 @@ namespace blitzdj
 
         SpotifyResponse finishResponse(
             const HttpResponse& response,
-            const std::string& fallbackError
+            const std::string& context
         );
 
         bool updateTokens(const Json& response);
